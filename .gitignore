@@ -1,0 +1,5 @@
+.vscode*
+
+models/garden
+
+*__pycache__*
