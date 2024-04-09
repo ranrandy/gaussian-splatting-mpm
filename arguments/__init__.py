@@ -39,7 +39,14 @@ class ModelParams(ParamGroup):
     def __init__(self, parser, sentinel=False):
         
         self._model_path = ""
+        self._white_background = False
+
+        self.view_cam_idx = 0
+        self.save_path = ""
+
         self.loaded_iter = -1
+
+        self.debug = False
         
         super().__init__(parser, "Loading Parameters", sentinel)
 
