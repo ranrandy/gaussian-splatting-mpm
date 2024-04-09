@@ -30,7 +30,7 @@ def load_model(args):
     if args.loaded_iter == -1:
         loaded_iter = searchForMaxIteration(os.path.join(args.model_path, "point_cloud"))
     else:
-        args.loaded_iter
+        loaded_iter = args.loaded_iter
     print("Loading trained model at iteration {}".format(loaded_iter))
 
     gaussians.load_ply(os.path.join(args.model_path, "point_cloud", "iteration_" + str(loaded_iter), "point_cloud.ply"))
