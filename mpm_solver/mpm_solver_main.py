@@ -4,8 +4,10 @@ import os
 import numpy as np
 import h5py
 import taichi as ti
+import taichi.math as tm
 from mpm_model import *
 from mpm_solver.utils import *
+from collider import *
 
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 
@@ -161,6 +163,65 @@ class MPM_Simulator:
             nu = self.mpm_model.nu[i]
             self.mpm_model.mu[i] = E / (2 * (1 + nu))
             self.mpm_model.lam[i] = E * nu / ((1 + nu) * (1 - 2 * nu))
+
+    # a surface specified by a point and the normal vector
+    def add_surface_collider(
+        self,
+        point,
+        normal,
+        surface="sticky", # For now, not used
+        friction=0.0,
+        start_time=0.0, # For now, not used
+        end_time=999.0, # For now, not used
+    ):
+        point = list(point)
+        # Normalize normal
+        normal_scale = 1.0 / tm.sqrt(float(sum(x**2 for x in normal)))
+        normal = list(normal_scale * x for x in normal)
+
+        collider_param = MPM_Collider()
+
+        collider_param.point = tm.vec3(point[0], point[1], point[2])
+        collider_param.normal = tm.vec3(normal[0], normal[1], normal[2])
+        collider_param.friction = friction
+
+        self.collider_params.append(collider_param)
+
+        @ti.kernel
+        def collide(
+            time: float,
+            dt: float,
+            state: MPM_state,
+            model: MPM_model,
+            param: MPM_Collider
+        ):
+            for grid_x, grid_y, grid_z in state.grid_m:
+                offset = ti.vec3(
+                    float(grid_x) * model.dx - param.point[0],
+                    float(grid_y) * model.dx - param.point[1],
+                    float(grid_z) * model.dx - param.point[2],
+                )
+                n = ti.vec3(param.normal[0], param.normal[1], param.normal[2])
+                dotproduct = ti.dot(offset, n)
+
+                if dotproduct < 0.0:
+                    v = state.grid_v_out[grid_x, grid_y, grid_z]
+                    normal_component = ti.dot(v, n)
+                    v = (
+                        v - tm.min(normal_component, 0.0) * n
+                    )  # Project out only inward normal component
+                    if normal_component < 0.0 and tm.length(v) > 1e-20:
+                        v = tm.max(
+                            0.0, tm.length(v) + normal_component * param.friction
+                        ) * tm.normalize(
+                            v
+                        )  # apply friction here
+                    state.grid_v_out[grid_x, grid_y, grid_z] = tm.vec3(
+                        0.0, 0.0, 0.0
+                    ) # This line was in the Warp implementation but seems like a mistake. This might make the surface act sticky?
+
+        self.grid_postprocess.append(collide)
+        self.modify_bc.append(None)
 
 
 
