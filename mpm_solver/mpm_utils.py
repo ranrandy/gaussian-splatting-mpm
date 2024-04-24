@@ -183,7 +183,7 @@ def compute_dweight(model, w, dw, i, j, k):
 @ti.kernel
 def p2g_apic_with_stress(state: ti.template(), model: ti.template(), dt: ti.f32):
     for p in range(model.n_particles):
-        if state.particle_selection[p] == 0:
+        # if state.particle_selection[p] == 0:
             stress = state.particle_stress[p]
             grid_pos = state.particle_x[p] * model.inv_dx
             base_pos = (grid_pos - 0.5).cast(
@@ -235,8 +235,10 @@ def p2g_apic_with_stress(state: ti.template(), model: ti.template(), dt: ti.f32)
                     C - C.transpose()
                 )  # Update C_p^n matrix based on a damping factor
 
-                if model.rpic_damping < -0.001:
-                    C = ti.Matrix.zero(ti.f32, 3, 3)
+                if model.rpic_damping < -0.001:      # !!
+                    C = ti.Matrix.zero(ti.f32, 3, 3) # !!
+                # C = ti.Matrix.zero(ti.f32, 3, 3)
+
                 # m_i^n       = Σ_p w_ip^n m_p,
                 # m_i^n v_i^n = Σ_p w_ip^n m_p (v_p^n + C_p^n (x_i - x_p^n))
                 # print(state.particle_vol[p])
@@ -245,7 +247,7 @@ def p2g_apic_with_stress(state: ti.template(), model: ti.template(), dt: ti.f32)
                 elastic_force = -state.particle_vol[p] * stress @ dweight # -state.particle_vol[p] * stress * dweight
                 v_in_add = (
                     weight * state.particle_mass[p] * (state.particle_v[p] + C @ dpos)
-                    + dt * elastic_force
+                    + dt * elastic_force             # !!
                 )
                 ti.atomic_add(state.grid_v_in[ix, iy, iz], v_in_add)
                 ti.atomic_add(state.grid_m[ix, iy, iz], weight * state.particle_mass[p])
@@ -253,7 +255,7 @@ def p2g_apic_with_stress(state: ti.template(), model: ti.template(), dt: ti.f32)
 
 ### Grid Operations ###
 @ti.kernel
-def grid_normalization_and_grativity(
+def grid_normalization_and_gravity(
     state: ti.template(), model: ti.template(), dt: ti.f32
 ):
     for grid_x, grid_y, grid_z in ti.ndrange(
@@ -266,6 +268,7 @@ def grid_normalization_and_grativity(
             )
             v_out += dt * model.gravitational_acceleration
             state.grid_v_out[grid_x, grid_y, grid_z] = v_out
+            # state.grid_v_out[grid_x, grid_y, grid_z] = tm.vec3(0.0, 0.0, -9.8)
 
 
 @ti.kernel
@@ -312,7 +315,7 @@ def update_cov(state, p, grad_v, dt):
 @ti.kernel
 def g2p(state: ti.template(), model: ti.template(), dt: ti.f32):
     for p in range(model.n_particles):
-        if state.particle_selection[p] == 0:
+        # if state.particle_selection[p] == 0:
             grid_pos = state.particle_x[p] * model.inv_dx
             base_pos = (grid_pos - 0.5).cast(int)
             fx = grid_pos - base_pos.cast(float)
@@ -366,8 +369,8 @@ def g2p(state: ti.template(), model: ti.template(), dt: ti.f32):
                 dt * new_v
             )  # x_p^(n+1) = x_p^n + (Delta_t * v_p^(n+1))
             state.particle_C[p] = (
-                new_C  # C_p^(n+1) = (1 / (Delta_x^2 * (b + 1))) * sum_i(w_ip^n * v_i^(n+1) * (x_i^n - x_p^n)^T)
-            )
+                new_C
+            )  # C_p^(n+1) = (1 / (Delta_x^2 * (b + 1))) * sum_i(w_ip^n * v_i^(n+1) * (x_i^n - x_p^n)^T)
             I = ti.Matrix.identity(ti.f32, 3)
             F_tmp = (I + new_F * dt) * state.particle_F[
                 p

@@ -343,8 +343,8 @@ class MPM_Simulator:
 
     # @ti.function
     def p2g2p_sanity_check(self, dt: ti.f32):
-        # reset_grid_state(self.mpm_state, self.mpm_model)
+        reset_grid_state(self.mpm_state, self.mpm_model)
         p2g_apic_with_stress(self.mpm_state, self.mpm_model, dt)
-        grid_normalization_and_grativity(self.mpm_state, self.mpm_model, dt)
+        grid_normalization_and_gravity(self.mpm_state, self.mpm_model, dt)
         g2p(self.mpm_state, self.mpm_model, dt)
 

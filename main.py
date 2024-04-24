@@ -168,7 +168,7 @@ def simulate(model_args, mpm_args):
         "nu": 0.2,
         "material": "metal",
         "friction_angle": 35,
-        "g": [0.0, 0.0, -4.0],
+        "g": [0.0, 0.0, -0.0098],
         "density": 200.0,
     }
     mpm_solver.set_parameters_dict(material_params)
@@ -189,7 +189,7 @@ def simulate(model_args, mpm_args):
         frame_dt = 4e-2
         step_per_frame = int(frame_dt / substep_dt)
 
-        for step in range(step_per_frame):
+        for step in range(1): # 200 # step_per_frame
             mpm_solver.p2g2p_sanity_check(substep_dt)
 
         delta_means3D = mpm_solver.export_particle_x_to_torch().to(device="cuda:0")
