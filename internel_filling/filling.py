@@ -40,6 +40,7 @@ def get_particle_volume(pos, grid_n: int, grid_dx: float, uniform: bool = False)
     grid = ti.field(dtype=int, shape=(grid_n, grid_n, grid_n))
     particle_vol = ti.field(dtype=float, shape=pos.shape[0])
 
+    # print(particle_vol.shape)
     assign_particle_to_grid(ti_pos, grid, grid_dx)
     compute_particle_volume(ti_pos, grid, particle_vol, grid_dx)
 

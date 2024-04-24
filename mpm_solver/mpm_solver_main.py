@@ -5,8 +5,8 @@ import numpy as np
 import h5py
 import taichi as ti
 import torch
-from mpm_model import *
-from mpm_solver.utils import *
+from mpm_solver.mpm_model import *
+from mpm_solver.mpm_utils import *
 
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 
@@ -21,70 +21,70 @@ class MPM_Simulator:
 
     def initialize(self, n_particles, n_grid=100, grid_lim=1.0):
         self.n_particles = n_particles
-        self.mpm_model = MPM_model()
-        self.mpm_model.grid_lim = grid_lim
-        self.mpm_model.n_grid = n_grid
-        self.mpm_model.grid_dim_x = n_grid
-        self.mpm_model.grid_dim_y = n_grid
-        self.mpm_model.grid_dim_z = n_grid
-        self.mpm_model.dx = grid_lim / n_grid
-        self.mpm_model.inv_dx = n_grid / grid_lim
+        self.mpm_model = MPM_model(n_particles, n_grid, grid_lim)
+        # self.mpm_model.grid_lim = grid_lim
+        # self.mpm_model.n_grid = n_grid
+        # self.mpm_model.grid_dim_x = n_grid
+        # self.mpm_model.grid_dim_y = n_grid
+        # self.mpm_model.grid_dim_z = n_grid
+        # self.mpm_model.dx = grid_lim / n_grid
+        # self.mpm_model.inv_dx = n_grid / grid_lim
 
-        # Initialize fields for model properties
-        self.mpm_model.E = ti.field(dtype=ti.f32, shape=n_particles)
-        self.mpm_model.nu = ti.field(dtype=ti.f32, shape=n_particles)
-        self.mpm_model.mu = ti.field(dtype=ti.f32, shape=n_particles)
-        self.mpm_model.lam = ti.field(dtype=ti.f32, shape=n_particles)
-        self.mpm_model.yield_stress = ti.field(dtype=ti.f32, shape=n_particles)
+        # # Initialize fields for model properties
+        # self.mpm_model.E = ti.field(dtype=ti.f32, shape=n_particles)
+        # self.mpm_model.nu = ti.field(dtype=ti.f32, shape=n_particles)
+        # self.mpm_model.mu = ti.field(dtype=ti.f32, shape=n_particles)
+        # self.mpm_model.lam = ti.field(dtype=ti.f32, shape=n_particles)
+        # self.mpm_model.yield_stress = ti.field(dtype=ti.f32, shape=n_particles)
 
-        self.mpm_model.material = 0  # Assume some default material type
-        self.mpm_model.update_cov_with_F = False  # Default value as example
-        self.mpm_model.friction_angle = 25.0
-        sin_phi = ti.sin(self.mpm_model.friction_angle / 180.0 * 3.141592653589793)
-        self.mpm_model.alpha = ti.sqrt(2.0 / 3.0) * 2.0 * sin_phi / (3.0 - sin_phi)
+        # self.mpm_model.material = 0  # Assume some default material type
+        # self.mpm_model.update_cov_with_F = False  # Default value as example
+        # self.mpm_model.friction_angle = 25.0
+        # sin_phi = ti.sin(self.mpm_model.friction_angle / 180.0 * 3.141592653589793)
+        # self.mpm_model.alpha = ti.sqrt(2.0 / 3.0) * 2.0 * sin_phi / (3.0 - sin_phi)
 
-        self.mpm_model.gravitational_acceleration = ti.Vector(
-            [0.0, 0.0, 0.0]
-        )  # Adjust as necessary
-        self.mpm_model.rpic_damping = 0.0
-        self.mpm_model.grid_v_damping_scale = 1.1
+        # self.mpm_model.gravitational_acceleration = ti.Vector(
+        #     [0.0, 0.0, 0.0]
+        # )  # Adjust as necessary
+        # self.mpm_model.rpic_damping = 0.0
+        # self.mpm_model.grid_v_damping_scale = 1.1
 
-        self.mpm_state = MPM_state()
-        # Initialize particle fields
-        self.mpm_state.particle_x = ti.Vector.field(3, dtype=ti.f32, shape=n_particles)
-        self.mpm_state.particle_v = ti.Vector.field(3, dtype=ti.f32, shape=n_particles)
-        self.mpm_state.particle_F = ti.Matrix.field(
-            3, 3, dtype=ti.f32, shape=n_particles
-        )
-        self.mpm_state.particle_R = ti.Matrix.field(
-            3, 3, dtype=ti.f32, shape=n_particles
-        )
-        self.mpm_state.particle_init_cov = ti.field(
-            dtype=ti.f32, shape=n_particles * 6
-        )  # Adjust as needed
-        self.mpm_state.particle_cov = ti.field(
-            dtype=ti.f32, shape=n_particles * 6
-        )  # Adjust as needed
-        self.mpm_state.particle_F_trial = ti.Matrix.field(
-            3, 3, dtype=ti.f32, shape=n_particles
-        )
-        self.mpm_state.particle_stress = ti.Matrix.field(
-            3, 3, dtype=ti.f32, shape=n_particles
-        )
-        self.mpm_state.particle_vol = ti.field(dtype=ti.f32, shape=n_particles)
-        self.mpm_state.particle_mass = ti.field(dtype=ti.f32, shape=n_particles)
-        self.mpm_state.particle_density = ti.field(dtype=ti.f32, shape=n_particles)
-        self.mpm_state.particle_C = ti.Matrix.field(
-            3, 3, dtype=ti.f32, shape=n_particles
-        )
-        self.mpm_state.particle_Jp = ti.field(dtype=ti.f32, shape=n_particles)
-        self.mpm_state.particle_selection = ti.field(dtype=ti.i32, shape=n_particles)
+        self.mpm_state = MPM_state(n_particles, n_grid)
+        # # Initialize particle fields
+        # self.mpm_state.particle_x = ti.Vector.field(3, dtype=ti.f32, shape=n_particles)
+        # self.mpm_state.particle_v = ti.Vector.field(3, dtype=ti.f32, shape=n_particles)
+        # self.mpm_state.particle_F = ti.Matrix.field(
+        #     3, 3, dtype=ti.f32, shape=n_particles
+        # )
+        # self.mpm_state.particle_R = ti.Matrix.field(
+        #     3, 3, dtype=ti.f32, shape=n_particles
+        # )
+        # self.mpm_state.particle_init_cov = ti.field(
+        #     dtype=ti.f32, shape=n_particles * 6
+        # )  # Adjust as needed
+        # self.mpm_state.particle_cov = ti.field(
+        #     dtype=ti.f32, shape=n_particles * 6
+        # )  # Adjust as needed
+        # self.mpm_state.particle_F_trial = ti.Matrix.field(
+        #     3, 3, dtype=ti.f32, shape=n_particles
+        # )
+        # self.mpm_state.particle_stress = ti.Matrix.field(
+        #     3, 3, dtype=ti.f32, shape=n_particles
+        # )
+        # self.mpm_state.particle_vol = ti.field(dtype=ti.f32, shape=n_particles)
+        # self.mpm_state.particle_mass = ti.field(dtype=ti.f32, shape=n_particles)
+        # self.mpm_state.particle_density = ti.field(dtype=ti.f32, shape=n_particles)
+        # self.mpm_state.particle_C = ti.Matrix.field(
+        #     3, 3, dtype=ti.f32, shape=n_particles
+        # )
+        # self.mpm_state.particle_Jp = ti.field(dtype=ti.f32, shape=n_particles)
+        # self.mpm_state.particle_selection = ti.field(dtype=ti.i32, shape=n_particles)
 
-        # Initialize grid fields
-        grid_shape = (n_grid, n_grid, n_grid)
-        self.mpm_state.grid_m = ti.field(dtype=ti.f32, shape=grid_shape)
-        self.mpm_state.grid_v_in = ti.Vector.field(3, dtype=ti.f32, shape=grid_shape)
-        self.mpm_state.grid_v_out = ti.Vector.field(3, dtype=ti.f32, shape=grid_shape)
+        # # Initialize grid fields
+        # grid_shape = (n_grid, n_grid, n_grid)
+        # self.mpm_state.grid_m = ti.field(dtype=ti.f32, shape=grid_shape)
+        # self.mpm_state.grid_v_in = ti.Vector.field(3, dtype=ti.f32, shape=grid_shape)
+        # self.mpm_state.grid_v_out = ti.Vector.field(3, dtype=ti.f32, shape=grid_shape)
 
         self.time = 0.0
 
@@ -185,7 +185,7 @@ class MPM_Simulator:
             self.mpm_model.xi = kwargs["xi"]
         if "friction_angle" in kwargs:
             self.mpm_model.friction_angle = kwargs["friction_angle"]
-            sin_phi = ti.sin(self.mpm_model.friction_angle / 180.0 * ti.pi)
+            sin_phi = ti.sin(self.mpm_model.friction_angle / 180.0 * tm.pi)
             self.mpm_model.alpha = ti.sqrt(2.0 / 3.0) * 2.0 * sin_phi / (3.0 - sin_phi)
         if "g" in kwargs:
             self.mpm_model.gravitational_acceleration = ti.Vector(
@@ -313,6 +313,7 @@ class MPM_Simulator:
     #     for key, value in self.time_profile.items():
     #         print(key, sum(value))
 
+    # @ti.func
     def load_initial_data_from_torch(self, tensor_x, tensor_volume, tensor_cov=None, n_grid=100, grid_lim=1.0):
         n_particles = tensor_x.shape[0]
         dim = tensor_x.shape[1]  # Not used directly but can be part of model configuration
@@ -340,7 +341,7 @@ class MPM_Simulator:
         print("Particles initialized from torch data.")
         print("Total particles: ", n_particles)
 
-    @ti.function
+    # @ti.function
     def p2g2p_sanity_check(self, dt: ti.f32):
         # reset_grid_state(self.mpm_state, self.mpm_model)
         p2g_apic_with_stress(self.mpm_state, self.mpm_model, dt)

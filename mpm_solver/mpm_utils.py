@@ -1,16 +1,16 @@
 import taichi as ti
+import taichi.math as tm
 import torch
 import numpy as np
-from mpm_model import *
+from mpm_solver.mpm_model import *
 
 ti.init(arch=ti.cuda)
 
 
 # Functions used to compute stress from the deformation gradient F
+# F: ti.Matrix, U: ti.Matrix, V: ti.Matrix, J: ti.f32, mu: ti.f32, lam: ti.f32
 @ti.func  # τ = 2μ(F^E - R)F^(E^T) + λ(J - 1)I_c
-def kirchoff_stress_FCR(
-    F: ti.Matrix, U: ti.Matrix, V: ti.Matrix, J: ti.f32, mu: ti.f32, lam: ti.f32
-):
+def kirchoff_stress_FCR(F: tm.mat3, U: tm.mat3, V: tm.mat3, J: ti.f32, mu: ti.f32, lam: ti.f32):
     # Compute Kirchoff stress for Fixed Corotated model (tau = P F^T) (B.1.)
     R = U @ V.transpose()  # Compute rotation matrix R
     identity_matrix = ti.Matrix([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
@@ -18,9 +18,7 @@ def kirchoff_stress_FCR(
 
 
 @ti.func  # τ = U(2με + λsum(ε)1)V^T
-def kirchoff_stress_StVK(
-    F: ti.Matrix, U: ti.Matrix, V: ti.Matrix, sig: ti.Vector, mu: ti.f32, lam: ti.f32
-):
+def kirchoff_stress_StVK(F: tm.mat3, U: tm.mat3, V: tm.mat3, sig: tm.vec3, mu: ti.f32, lam: ti.f32):
     # Compute Kirchoff stress for StVK model (tau = 2με + λsum(ε)1) (B.2.)
     sig = ti.Vector([ti.max(sig[0], 0.01), ti.max(sig[1], 0.01), ti.max(sig[2], 0.01)])
     epsilon = ti.Vector([ti.log(sig[0]), ti.log(sig[1]), ti.log(sig[2])])
@@ -32,15 +30,7 @@ def kirchoff_stress_StVK(
 
 
 @ti.func  # This function is never used in calculating the Kirchhoff stress in original PhysGaussian
-def kirchoff_stress_NeoHookean(
-    F: ti.Matrix,
-    U: ti.Matrix,
-    V: ti.Matrix,
-    J: ti.f32,
-    sig: ti.Vector,
-    mu: ti.f32,
-    lam: ti.f32,
-):
+def kirchoff_stress_NeoHookean(F: tm.mat3, U: tm.mat3, V: tm.mat3, J: ti.f32, sig: tm.vec3, mu: ti.f32, lam: ti.f32):
     # Compute Kirchoff stress for Neo-Hookean model (tau = P F^T) (B.3.)
     b = ti.Vector([sig[0] ** 2, sig[1] ** 2, sig[2] ** 2])
     mean_b = (b[0] + b[1] + b[2]) / 3.0
@@ -58,7 +48,7 @@ def kirchoff_stress_NeoHookean(
 
 @ti.func
 def kirchoff_stress_Drucker_Prager(
-    F: ti.Matrix, U: ti.Matrix, V: ti.Matrix, sig: ti.Vector, mu: ti.f32, lam: ti.f32
+    F: tm.mat3, U: tm.mat3, V: tm.mat3, sig: tm.vec3, mu: ti.f32, lam: ti.f32
 ):
     # Compute Kirchoff stress for Drucker-Prager model (B.4.)
     log_sig_sum = ti.log(sig[0]) + ti.log(sig[1]) + ti.log(sig[2])
@@ -73,7 +63,7 @@ def kirchoff_stress_Drucker_Prager(
 
 ### P2G: Transfer particle data to grid ###
 @ti.kernel
-def reset_grid_state(state: MPM_state, model: MPM_model):
+def reset_grid_state(state: ti.template(), model: ti.template()):
     for x, y, z in ti.ndrange(model.grid_dim_x, model.grid_dim_y, model.grid_dim_z):
         state.grid_m[x, y, z] = 0.0
         state.grid_v_in[x, y, z] = ti.Vector([0.0, 0.0, 0.0])
@@ -81,7 +71,7 @@ def reset_grid_state(state: MPM_state, model: MPM_model):
 
 
 @ti.func
-def von_mises_return_mapping(F_trial: ti.Matrix, model: MPM_model, p: int):
+def von_mises_return_mapping(F_trial, model, p):
     # U = ti.Matrix.zero(ti.f32, 3, 3)
     # V = ti.Matrix.zero(ti.f32, 3, 3)
     # sig_old = ti.Vector.zero(ti.f32, 3)
@@ -124,61 +114,59 @@ def von_mises_return_mapping(F_trial: ti.Matrix, model: MPM_model, p: int):
         return F_trial
 
 
-@ti.kernel  ##### TODO: calculate the deformation gradients.
-def compute_stress_from_F_trial(state: MPM_state, model: MPM_model, dt: ti.f32):
-    for p in range(model.n_particles):
-        if state.particle_selection[p] == 0:
-            if model.material == 1:  # metal ??
-                state.particle_F[p] = von_mises_return_mapping(
-                    state.particle_F_trial[p], model, p
-                )
-            elif model.material == 2:  # sand  ??
-                state.particle_F[p] = sand_return_mapping(
-                    state.particle_F_trial[p], state, model, p
-                )
-            elif model.material == 3:  # visplas, with StVk + VM, no thickening ??
-                state.particle_F[p] = viscoplasticity_return_mapping_with_StVK(
-                    state.particle_F_trial[p], model, p, dt
-                )
-            elif model.material == 5:
-                state.particle_F[p] = von_mises_return_mapping_with_damage(
-                    state.particle_F_trial[p], model, p
-                )
-            else:  # elastic ??
-                state.particle_F[p] = state.particle_F_trial[p]
+# @ti.kernel  ##### TODO: calculate the deformation gradients.
+# def compute_stress_from_F_trial(state: MPM_state, model: MPM_model, dt: ti.f32):
+#     for p in range(model.n_particles):
+#         if state.particle_selection[p] == 0:
+#             if model.material == 1:  # metal ??
+#                 state.particle_F[p] = von_mises_return_mapping(
+#                     state.particle_F_trial[p], model, p
+#                 )
+#             elif model.material == 2:  # sand  ??
+#                 state.particle_F[p] = sand_return_mapping(
+#                     state.particle_F_trial[p], state, model, p
+#                 )
+#             elif model.material == 3:  # visplas, with StVk + VM, no thickening ??
+#                 state.particle_F[p] = viscoplasticity_return_mapping_with_StVK(
+#                     state.particle_F_trial[p], model, p, dt
+#                 )
+#             elif model.material == 5:
+#                 state.particle_F[p] = von_mises_return_mapping_with_damage(
+#                     state.particle_F_trial[p], model, p
+#                 )
+#             else:  # elastic ??
+#                 state.particle_F[p] = state.particle_F_trial[p]
 
-            J = ti.determinant(state.particle_F[p])
-            # U = ti.Matrix.zero(ti.f32, 3, 3)
-            # V = ti.Matrix.zero(ti.f32, 3, 3)
-            # sig = ti.Vector.zero(ti.f32, 3)
-            stress = ti.Matrix.zero(ti.f32, 3, 3)
-            U, sig, V = ti.svd(state.particle_F[p])
+#             J = ti.determinant(state.particle_F[p])
+#             # U = ti.Matrix.zero(ti.f32, 3, 3)
+#             # V = ti.Matrix.zero(ti.f32, 3, 3)
+#             # sig = ti.Vector.zero(ti.f32, 3)
+#             stress = ti.Matrix.zero(ti.f32, 3, 3)
+#             U, sig, V = ti.svd(state.particle_F[p])
 
-            if model.material[p] == 0:
-                stress = kirchoff_stress_FCR(
-                    state.particle_F[p], U, V, J, model.mu[p], model.lam[p]
-                )
-            elif model.material == 1:
-                stress = kirchoff_stress_StVK(
-                    state.particle_F[p], U, V, sig, model.mu[p], model.lam[p]
-                )
-            elif model.material == 2:
-                stress = kirchoff_stress_Drucker_Prager(
-                    state.particle_F[p], U, V, sig, model.mu[p], model.lam[p]
-                )
-            elif model.material == 3:
-                stress = kirchoff_stress_StVK(
-                    state.particle_F[p], U, V, sig, model.mu[p], model.lam[p]
-                )
+#             if model.material[p] == 0:
+#                 stress = kirchoff_stress_FCR(
+#                     state.particle_F[p], U, V, J, model.mu[p], model.lam[p]
+#                 )
+#             elif model.material == 1:
+#                 stress = kirchoff_stress_StVK(
+#                     state.particle_F[p], U, V, sig, model.mu[p], model.lam[p]
+#                 )
+#             elif model.material == 2:
+#                 stress = kirchoff_stress_Drucker_Prager(
+#                     state.particle_F[p], U, V, sig, model.mu[p], model.lam[p]
+#                 )
+#             elif model.material == 3:
+#                 stress = kirchoff_stress_StVK(
+#                     state.particle_F[p], U, V, sig, model.mu[p], model.lam[p]
+#                 )
 
-            stress = (stress + stress.transpose()) / 2.0
-            state.particle_stress[p] = stress
+#             stress = (stress + stress.transpose()) / 2.0
+#             state.particle_stress[p] = stress
 
 
-@ti.func
-def compute_dweight(
-    model: MPM_state, w: ti.Matrix, dw: ti.Matrix, i: ti.int32, j: ti.int32, k: ti.int32
-):
+@ti.func # model: MPM_state, w: tm.mat3, dw: tm.mat3, i: ti.int32, j: ti.int32, k: ti.int32
+def compute_dweight(model, w, dw, i, j, k):
     dweight = ti.Vector(
         [
             dw[0, i] * w[1, j] * w[2, k],
@@ -186,11 +174,14 @@ def compute_dweight(
             w[0, i] * w[1, j] * dw[2, k],
         ]
     )
+    # dweight = tm.vec3(dw[0, i] * w[1, j] * w[2, k],
+    #                   w[0, i] * dw[1, j] * w[2, k],
+    #                   w[0, i] * w[1, j] * dw[2, k])
     return dweight * model.inv_dx
 
 
 @ti.kernel
-def p2g_apic_with_stress(state: MPM_state, model: MPM_model, dt: ti.f32):
+def p2g_apic_with_stress(state: ti.template(), model: ti.template(), dt: ti.f32):
     for p in range(model.n_particles):
         if state.particle_selection[p] == 0:
             stress = state.particle_stress[p]
@@ -238,7 +229,7 @@ def p2g_apic_with_stress(state: MPM_state, model: MPM_model, dt: ti.f32):
                 ) * model.dx  # (x_i - x_p^n), position diff from the particle to the grid node
                 ix, iy, iz = base_pos + offset
                 weight = w[0, offset.x] * w[1, offset.y] * w[2, offset.z]
-                dweight = compute_dweight(model, fx, dw, offset.x, offset.y, offset.z)
+                dweight = compute_dweight(model, w, dw, offset.x, offset.y, offset.z)
                 C = state.particle_C[p]
                 C = (1.0 - model.rpic_damping) * C + model.rpic_damping / 2.0 * (
                     C - C.transpose()
@@ -248,9 +239,12 @@ def p2g_apic_with_stress(state: MPM_state, model: MPM_model, dt: ti.f32):
                     C = ti.Matrix.zero(ti.f32, 3, 3)
                 # m_i^n       = Σ_p w_ip^n m_p,
                 # m_i^n v_i^n = Σ_p w_ip^n m_p (v_p^n + C_p^n (x_i - x_p^n))
-                elastic_force = -state.particle_vol[p] * stress * dweight
+                # print(state.particle_vol[p])
+                # print(stress)
+                # print(dweight)
+                elastic_force = -state.particle_vol[p] * stress @ dweight # -state.particle_vol[p] * stress * dweight
                 v_in_add = (
-                    weight * state.particle_mass[p] * (state.particle_v[p] + C * dpos)
+                    weight * state.particle_mass[p] * (state.particle_v[p] + C @ dpos)
                     + dt * elastic_force
                 )
                 ti.atomic_add(state.grid_v_in[ix, iy, iz], v_in_add)
@@ -260,7 +254,7 @@ def p2g_apic_with_stress(state: MPM_state, model: MPM_model, dt: ti.f32):
 ### Grid Operations ###
 @ti.kernel
 def grid_normalization_and_grativity(
-    state: MPM_state, model: MPM_model, dt: ti.float32
+    state: ti.template(), model: ti.template(), dt: ti.f32
 ):
     for grid_x, grid_y, grid_z in ti.ndrange(
         model.grid_dim_x, model.grid_dim_y, model.grid_dim_z
@@ -275,7 +269,7 @@ def grid_normalization_and_grativity(
 
 
 @ti.kernel
-def add_damping_via_grid(state: MPM_state, scale: ti.f32):
+def add_damping_via_grid(state: ti.template(), scale: ti.f32):
     for grid_xyz in ti.grouped(
         state.grid_v_out
     ):  ##### TODO: I am not sure whether we can use this kind of implementaion for a triple
@@ -283,7 +277,7 @@ def add_damping_via_grid(state: MPM_state, scale: ti.f32):
 
 
 @ti.func
-def update_cov(state: MPM_state, p: int, grad_v: ti.Matrix, dt: ti.f32):
+def update_cov(state, p, grad_v, dt):
     cov_n = ti.Matrix(
         [
             [
@@ -316,7 +310,7 @@ def update_cov(state: MPM_state, p: int, grad_v: ti.Matrix, dt: ti.f32):
 
 ### G2P: Transfer grid data back to particles ###
 @ti.kernel
-def g2p(state: MPM_state, model: MPM_model, dt: ti.f32):
+def g2p(state: ti.template(), model: ti.template(), dt: ti.f32):
     for p in range(model.n_particles):
         if state.particle_selection[p] == 0:
             grid_pos = state.particle_x[p] * model.inv_dx
@@ -363,9 +357,9 @@ def g2p(state: MPM_state, model: MPM_model, dt: ti.f32):
                 weight = w[0, offset.x] * w[1, offset.y] * w[2, offset.z]
                 grid_v = state.grid_v_out[ix, iy, iz]
                 new_v += grid_v * weight
-                new_C += ti.outer_product(grid_v, dpos) * (weight * model.inv_dx * 4.0)
+                new_C += grid_v.outer_product(dpos) * (weight * model.inv_dx * 4.0)
                 dweight = compute_dweight(model, w, dw, offset.x, offset.y, offset.z)
-                new_F += ti.outer_product(grid_v, dweight)
+                new_F += grid_v.outer_product(dweight)
 
             state.particle_v[p] = new_v  # v_p^(n+1) = sum_i(v_i^(n+1) * w_ip^n)
             state.particle_x[p] += (
@@ -389,32 +383,32 @@ def g2p(state: MPM_state, model: MPM_model, dt: ti.f32):
 # p2g_apic_with_stress, grid_normalization_and_gravity, !add_damping_via_grid, (!grid_postprocess), g2p
 
 
-@ti.func
+# @ti.func
 def set_vec3_to_zero(target_array):
     for i in range(target_array.shape[0]):
         target_array[i] = ti.Vector([0.0, 0.0, 0.0])
 
 
-@ti.func
+# @ti.func
 def set_mat33_to_identity(target_array):
     for i in range(target_array.shape[0]):
         target_array[i] = ti.Matrix([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
 
 
-@ti.func
-def set_value_to_float_array(target_array, value):
+@ti.kernel
+def set_value_to_float_array(target_array: ti.template(), value: ti.f32):
     for i in target_array:
         target_array[i] = value
 
 
-@ti.func
-def get_float_array_product(arrayA, arrayB, arrayC):
+@ti.kernel
+def get_float_array_product(arrayA: ti.template(), arrayB: ti.template(), arrayC: ti.template()):
     for i in arrayA:
         arrayC[i] = arrayA[i] * arrayB[i]
 
 
-@ti.func
-def apply_additional_params(state, model, params_modifier):
+@ti.kernel
+def apply_additional_params(state: ti.template(), model: ti.template(), params_modifier: ti.template()):
     for i in range(state.particle_x.shape[0]):
         pos = state.particle_x[i]
         if (
@@ -432,11 +426,11 @@ def apply_additional_params(state, model, params_modifier):
 
 @ti.kernel
 def compute_mu_lam_from_E_nu(
-    n_particles,
-    E,
-    nu,
-    mu,
-    lam,
+    n_particles: ti.int32,
+    E: ti.template(),
+    nu: ti.template(),
+    mu: ti.template(),
+    lam: ti.template(),
 ):
     for p in range(n_particles):
         mu[p] = E[p] / (2.0 * (1.0 + nu[p]))
@@ -450,7 +444,7 @@ def multiply_and_update_density_mass(particle_density, particle_vol, particle_ma
 
 
 @ti.kernel
-def compute_R_from_F(state: MPM_state, model: MPM_model):
+def compute_R_from_F(state: ti.template(), model: ti.template()):
     for p in range(model.n_particles):
         F = state.particle_F_trial[p]
         # U = ti.Matrix.zero(ti.f32, 3, 3)
@@ -474,7 +468,7 @@ def compute_R_from_F(state: MPM_state, model: MPM_model):
 
 
 @ti.kernel
-def compute_cov_from_F(state: MPM_state, model: MPM_model):
+def compute_cov_from_F(state: ti.template(), model: ti.template()):
     for p in range(model.n_particles):
         F = state.particle_F_trial[p]
 
