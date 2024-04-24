@@ -3,6 +3,8 @@ import sys
 import json
 from argparse import ArgumentParser
 from arguments import *
+from mpm_solver.mpm_solver_main import *
+from internel_filling.filling import *
 
 import math
 import numpy as np
@@ -35,7 +37,6 @@ def load_model(args):
 
     gaussians.load_ply(os.path.join(args.model_path, "point_cloud", "iteration_" + str(loaded_iter), "point_cloud.ply"))
     return gaussians
-
 
 def load_cameras(args):
     '''
@@ -72,7 +73,7 @@ def load_cameras(args):
     return cameras
 
 
-def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, delta_means3D, bg_color, args, scaling_modifier = 1.0):
+def render_frame(viewpoint_camera: TinyCam, pc: GaussianModel, sim_gs_mask, delta_means3D, bg_color, args, scaling_modifier = 1.0):
     '''
         Rasterize the Gaussian cloud
     '''
@@ -120,6 +121,13 @@ def simulate(model_args, mpm_args):
     gaussians = load_model(model_args)
     viewpoint_cams = load_cameras(model_args)
 
+    # Get the init position
+    # means3D = gaussians.get_xyz
+    # opacity = gaussians.get_opacity
+    # scaling_modifier = 1.0
+    # cov3D_precomp = gaussians.get_covariance(scaling_modifier)
+    # scales = pc.get_scaling
+    # rotations = pc.get_rotation
 
     # Simulation settings --> will move to mpm_args
     influenced_region_bound = torch.tensor(np.array([
@@ -141,13 +149,23 @@ def simulate(model_args, mpm_args):
 
     os.makedirs(os.path.join(model_args.save_path, "images"), exist_ok=True)
 
-
     # Simulate
     rendered_img_seq = []
 
     ### Render Initial frame
     delta_means3D = torch.tensor([0.0, 0.0, 0.0]).repeat(num_sim_gs, 1).cuda()
     rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, delta_means3D, background, model_args)
+
+    ### Wilson 4.24 main update
+    n_grid = 100
+    grid_lim = 1.0
+    mpm_init_vol = get_particle_volume(delta_means3D, n_grid, grid_lim / n_grid).to(device="cuda:0")
+
+    mpm_solver = MPM_Simulator(10)
+    mpm_solver.load_initial_data_from_torch(delta_means3D, mpm_init_vol)
+    mpm_solver.set_parameters_dict() ### TODO: parse the input params
+    ###
+
     rendered_img_seq.append(rendered_img)
     imageio.imwrite(os.path.join(model_args.save_path, "images", f"{0:04d}.png"), to8b(rendered_img))
 
@@ -155,8 +173,18 @@ def simulate(model_args, mpm_args):
         ### MPM Step
         ### TODO: delta_means3D, delta_rotation, ... = MPM_step(gaussians, mpm_args, ...)
 
-        ### Weekly Progress 1: Naive translation & rotation
-        delta_means3D[:, 0] = delta_means3D[:, 0] + 0.05
+        # ### Weekly Progress 1: Naive translation & rotation
+        # delta_means3D[:, 0] = delta_means3D[:, 0] + 0.05
+
+        ### Weekly Progress 2: Sanity check for the p2g and g2p processes with gravity force
+        substep_dt = 1e-4
+        frame_dt = 4e-2
+        step_per_frame = int(frame_dt / substep_dt)
+
+        for step in range(step_per_frame):
+            mpm_solver.p2g2p_sanity_check(substep_dt)
+
+        delta_means3D = mpm_solver.export_particle_x_to_torch()
         
         ### Render this frame
         rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, delta_means3D, background, model_args)

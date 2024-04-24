@@ -230,11 +230,11 @@ class MPM_Simulator:
 
         # Set values in Taichi field
         for i in range(self.n_particles):
-            self.particle_density[i] = numpy_densities[i]
+            self.mpm_state.particle_density[i] = numpy_densities[i]
 
         # Compute particle mass using updated densities
         multiply_and_update_density_mass(
-            self.particle_density, self.particle_vol, self.particle_mass
+            self.mpm_state.particle_density, self.mpm_state.particle_vol, self.mpm_state.particle_mass
         )
 
     def import_tensor_to_taichi(self, tensor, taichi_field):
@@ -249,13 +249,13 @@ class MPM_Simulator:
         if tensor_x is not None:
             if clone:
                 tensor_x = tensor_x.clone().detach()
-            self.import_tensor_to_taichi(tensor_x, self.particle_x)
+            self.import_tensor_to_taichi(tensor_x, self.mpm_state.particle_x)
 
     def import_particle_v_from_torch(self, tensor_v, clone=True):
         if tensor_v is not None:
             if clone:
                 tensor_v = tensor_v.clone().detach()
-            self.import_tensor_to_taichi(tensor_v, self.particle_v)
+            self.import_tensor_to_taichi(tensor_v, self.mpm_state.particle_v)
 
     def import_matrix_tensor_to_taichi(self, tensor, taichi_field):
         if tensor.is_cuda:
@@ -271,33 +271,33 @@ class MPM_Simulator:
             if clone:
                 tensor_F = tensor_F.clone().detach()
             tensor_F = tensor_F.reshape(-1, 3, 3)  # Ensure it's shaped as (-1, 3, 3)
-            self.import_matrix_tensor_to_taichi(tensor_F, self.particle_F)
+            self.import_matrix_tensor_to_taichi(tensor_F, self.mpm_state.particle_F)
 
     def import_particle_C_from_torch(self, tensor_C, clone=True):
         if tensor_C is not None:
             if clone:
                 tensor_C = tensor_C.clone().detach()
             tensor_C = tensor_C.reshape(-1, 3, 3)  # Ensure it's shaped as (-1, 3, 3)
-            self.import_matrix_tensor_to_taichi(tensor_C, self.particle_C)
+            self.import_matrix_tensor_to_taichi(tensor_C, self.mpm_state.particle_C)
 
     def export_particle_x_to_torch(self):
-        return taichi_to_torch(self.particle_x)
+        return taichi_to_torch(self.mpm_state.particle_x)
 
     def export_particle_v_to_torch(self):
-        return taichi_to_torch(self.particle_v)
+        return taichi_to_torch(self.mpm_state.particle_v)
 
     def export_particle_F_to_torch(self):
-        F_tensor = taichi_to_torch(self.particle_F)
+        F_tensor = taichi_to_torch(self.mpm_state.particle_F)
         return F_tensor.reshape(-1, 9)
 
     def export_particle_C_to_torch(self):
-        C_tensor = taichi_to_torch(self.particle_C)
+        C_tensor = taichi_to_torch(self.mpm_state.particle_C)
         return C_tensor.reshape(-1, 9)
 
     def export_particle_R_to_torch(self):
         # Update rotation matrices based on current deformation gradients
-        compute_R_from_F(self.particle_F, self.particle_R, self.n_particles)
-        R_tensor = taichi_to_torch(self.particle_R)
+        compute_R_from_F(self.mpm_state.particle_F, self.mpm_state.particle_R, self.n_particles)
+        R_tensor = taichi_to_torch(self.mpm_state.particle_R)
         return R_tensor.reshape(-1, 9)
 
     def export_particle_cov_to_torch(self):
@@ -308,7 +308,42 @@ class MPM_Simulator:
         # Convert and return the Taichi field as a PyTorch tensor
         return taichi_field_to_torch(self.mpm_state.particle_cov, self.n_particles)
 
-    def print_time_profile(self):
-        print("MPM Time profile:")
-        for key, value in self.time_profile.items():
-            print(key, sum(value))
+    # def print_time_profile(self):
+    #     print("MPM Time profile:")
+    #     for key, value in self.time_profile.items():
+    #         print(key, sum(value))
+
+    def load_initial_data_from_torch(self, tensor_x, tensor_volume, tensor_cov=None, n_grid=100, grid_lim=1.0):
+        n_particles = tensor_x.shape[0]
+        dim = tensor_x.shape[1]  # Not used directly but can be part of model configuration
+        assert tensor_x.shape[0] == tensor_volume.shape[0]
+
+        self.initialize(n_particles, n_grid, grid_lim)
+        self.import_particle_x_from_torch(tensor_x)
+
+        tensor_volume_np = tensor_volume.cpu().detach().numpy()
+        for i in range(self.n_particles):
+            self.mpm_state.particle_vol[i] = tensor_volume_np[i]
+
+        if tensor_cov is not None:
+            tensor_cov_np = tensor_cov.cpu().detach().numpy().reshape(-1, 6)
+            for i in range(self.n_particles):
+                for j in range(6):
+                    self.mpm_state.particle_init_cov[6 * i + j] = tensor_cov_np[i, j]
+            if self.update_cov_with_F:
+                for i in range(n_particles * 6):
+                    self.mpm_state.particle_cov[i] = self.mpm_state.particle_init_cov[i]
+
+        set_vec3_to_zero(self.mpm_state.particle_v)
+        set_mat33_to_identity(self.mpm_state.particle_F_trial)
+
+        print("Particles initialized from torch data.")
+        print("Total particles: ", n_particles)
+
+    @ti.function
+    def p2g2p_sanity_check(self, dt: ti.f32):
+        # reset_grid_state(self.mpm_state, self.mpm_model)
+        p2g_apic_with_stress(self.mpm_state, self.mpm_model, dt)
+        grid_normalization_and_grativity(self.mpm_state, self.mpm_model, dt)
+        g2p(self.mpm_state, self.mpm_model, dt)
+
