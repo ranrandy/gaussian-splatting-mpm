@@ -2,59 +2,54 @@ import taichi as ti
 
 ti.init(arch=ti.gpu)
 
+
+@ti.struct
 class MPM_model:
-    def __init__(self):
-        self.grid_lim = ti.field(dtype=ti.f32, shape=())
-        self.n_particles = ti.field(dtype=ti.i32, shape=())
-        self.n_grid = ti.field(dtype=ti.i32, shape=())
-        self.dx = ti.field(dtype=ti.f32, shape=())
-        self.inv_dx = ti.field(dtype=ti.f32, shape=())
-        self.grid_dim_x = ti.field(dtype=ti.i32, shape=())
-        self.grid_dim_y = ti.field(dtype=ti.i32, shape=())
-        self.grid_dim_z = ti.field(dtype=ti.i32, shape=())
-        
-        self.mu = ti.field(dtype=ti.f32, shape=())
-        self.lam = ti.field(dtype=ti.f32, shape=())
-        self.E = ti.field(dtype=ti.f32, shape=())
-        self.nu = ti.field(dtype=ti.f32, shape=())
-        self.material = ti.field(dtype=ti.i32, shape=())
-        
-        self.yield_stress = ti.field(dtype=ti.f32, shape=())
-        self.friction_angle = ti.field(dtype=ti.f32, shape=())
-        self.alpha = ti.field(dtype=ti.f32, shape=())
-        self.gravitational_acceleration = ti.Vector.field(3, dtype=ti.f32, shape=())
-        self.hardening = ti.field(dtype=ti.f32, shape=())
-        self.xi = ti.field(dtype=ti.f32, shape=())
-        self.plastic_viscosity = ti.field(dtype=ti.f32, shape=())
-        self.softening = ti.field(dtype=ti.f32, shape=())
+    grid_lim: float
+    n_particles: int
+    n_grid: int
+    dx: float
+    inv_dx: float
+    grid_dim_x: int
+    grid_dim_y: int
+    grid_dim_z: int
+    mu: ti.field(dtype=ti.f32)
+    lam: ti.field(dtype=ti.f32)
+    E: ti.field(dtype=ti.f32)
+    nu: ti.field(dtype=ti.f32)
+    material: int
+    yield_stress: ti.field(dtype=ti.f32)
+    friction_angle: float
+    alpha: float
+    gravitational_acceleration: ti.types.vector(3, ti.f32)
+    hardening: float
+    xi: float
+    plastic_viscosity: float
+    softening: float
+    rpic_damping: float
+    grid_v_damping_scale: float
+    update_cov_with_F: int
 
-        self.rpic_damping = ti.field(dtype=ti.f32, shape=())
-        self.grid_v_damping_scale = ti.field(dtype=ti.f32, shape=())
 
-        self.update_cov_with_F = ti.field(dtype=ti.i32, shape=())
-
+@ti.struct
 class MPM_state:
-    def __init__(self, num_particles, grid_size):
-        self.particle_x = ti.Vector.field(3, dtype=ti.f32, shape=num_particles)  # Current position
-        self.particle_v = ti.Vector.field(3, dtype=ti.f32, shape=num_particles)  # Velocity
-        self.particle_F = ti.Matrix.field(3, 3, dtype=ti.f32, shape=num_particles)  # Deformation gradient
-        self.particle_init_cov = ti.field(dtype=ti.f32, shape=num_particles)  # Initial covariance matrix
-        self.particle_cov = ti.field(dtype=ti.f32, shape=num_particles)  # Current covariance matrix
-        self.particle_F_trial = ti.Matrix.field(3, 3, dtype=ti.f32, shape=num_particles)  # Elastic deformation gradient for trial
-        self.particle_R = ti.Matrix.field(3, 3, dtype=ti.f32, shape=num_particles)  # Rotation matrix
-        self.particle_stress = ti.Matrix.field(3, 3, dtype=ti.f32, shape=num_particles)  # Stress tensor
-        self.particle_C = ti.Matrix.field(3, 3, dtype=ti.f32, shape=num_particles)  # Constitutive matrix?
-        self.particle_vol = ti.field(dtype=ti.f32, shape=num_particles)  # Volume
-        self.particle_mass = ti.field(dtype=ti.f32, shape=num_particles)  # Mass
-        self.particle_density = ti.field(dtype=ti.f32, shape=num_particles)  # Density
-        self.particle_Jp = ti.field(dtype=ti.f32, shape=num_particles)  # Plastic deformation
-        
-        self.particle_selection = ti.field(dtype=ti.i32, shape=num_particles)  # Simulation selector
+    # Particle-related properties
+    particle_x: ti.Vector.field(3, dtype=ti.f32)  # current position
+    particle_v: ti.Vector.field(3, dtype=ti.f32)  # particle velocity
+    particle_F: ti.Matrix.field(3, 3, dtype=ti.f32)  # deformation gradient
+    particle_init_cov: ti.field(dtype=ti.f32)  # initial covariance
+    particle_cov: ti.field(dtype=ti.f32)  # current covariance
+    particle_F_trial: ti.Matrix.field(3, 3, dtype=ti.f32)  # for return mapping
+    particle_R: ti.Matrix.field(3, 3, dtype=ti.f32)  # rotation matrix
+    particle_stress: ti.Matrix.field(3, 3, dtype=ti.f32)  # stress matrix
+    particle_C: ti.Matrix.field(3, 3, dtype=ti.f32)  # possibly elasticity tensor
+    particle_vol: ti.field(dtype=ti.f32)  # current volume
+    particle_mass: ti.field(dtype=ti.f32)  # mass
+    particle_density: ti.field(dtype=ti.f32)  # density
+    particle_Jp: ti.field(dtype=ti.f32)  # plastic deformation
+    particle_selection: ti.field(dtype=ti.i32)  # selection mask
 
-        # Grid properties
-        self.grid_m = ti.field(dtype=ti.f32, shape=grid_size)  # Mass at grid nodes
-        self.grid_v_in = ti.Vector.field(3, dtype=ti.f32, shape=grid_size)  # Input velocity at grid nodes
-        self.grid_v_out = ti.Vector.field(3, dtype=ti.f32, shape=grid_size)  # Output velocity at grid nodes
-
-
-
+    # Grid-related properties
+    grid_m: ti.field(dtype=ti.f32)  # mass at grid nodes
+    grid_v_in: ti.Vector.field(3, dtype=ti.f32)  # input velocity
+    grid_v_out: ti.Vector.field(3, dtype=ti.f32)  # output velocity
