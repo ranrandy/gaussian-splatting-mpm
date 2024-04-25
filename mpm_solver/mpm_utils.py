@@ -75,10 +75,11 @@ def von_mises_return_mapping(F_trial, model, p):
     # U = ti.Matrix.zero(ti.f32, 3, 3)
     # V = ti.Matrix.zero(ti.f32, 3, 3)
     # sig_old = ti.Vector.zero(ti.f32, 3)
-    U, sig_old, V = ti.svd(F_trial)
+    U, sig_mat, V = ti.svd(F_trial)
+    sig_old = tm.vec3(sig_mat[0,0], sig_mat[1,1], sig_mat[2,2])
 
     sig = ti.Vector(
-        [max(sig_old[0], 0.01), max(sig_old[1], 0.01), max(sig_old[2], 0.01)]
+        [ti.max(sig_old[0], 0.01), ti.max(sig_old[1], 0.01), ti.max(sig_old[2], 0.01)]
     )  # Clamp to prevent NaN cases
     epsilon = ti.Vector([ti.log(sig[0]), ti.log(sig[1]), ti.log(sig[2])])
     temp = (epsilon[0] + epsilon[1] + epsilon[2]) / 3.0
@@ -91,6 +92,7 @@ def von_mises_return_mapping(F_trial, model, p):
     sum_tau = tau[0] + tau[1] + tau[2]
     cond = tau - sum_tau / 3.0
 
+    F = tm.mat3(0.0)
     if cond.norm() > model.yield_stress[p]:
         epsilon_hat = epsilon - temp
         epsilon_hat_norm = epsilon_hat.norm() + 1e-6
@@ -107,62 +109,215 @@ def von_mises_return_mapping(F_trial, model, p):
         F_elastic = U @ sig_elastic @ V.transpose()
 
         if model.hardening == 1:
-            model.yield_stress[p] += 2.0 * mu * model.xi[p] * delta_gamma
+            model.yield_stress[p] += 2.0 * mu * model.xi * delta_gamma
 
-        return F_elastic
+        F = F_elastic
+        # return F_elastic
     else:
-        return F_trial
+        # return F_trial
+        F = F_trial
+    return F
+    
+@ti.func
+def sand_return_mapping(F_trial, state, model, p):
+    # U = tm.mat3(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    # V = tm.mat3(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    # sig = ti.vec3(0.0)
+    # wp.svd3(F_trial, U, sig, V)
+    U, sig_mat, V = ti.svd(F_trial)
+    sig = tm.vec3(sig_mat[0,0], sig_mat[1,1], sig_mat[2,2])
 
+    epsilon = tm.vec3(
+        ti.log(ti.max(ti.abs(sig[0]), 1e-14)),
+        ti.log(ti.max(ti.abs(sig[1]), 1e-14)),
+        ti.log(ti.max(ti.abs(sig[2]), 1e-14)),
+    )
+    sigma_out = tm.mat3(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+    tr = epsilon[0] + epsilon[1] + epsilon[2]  # + state.particle_Jp[p]
+    epsilon_hat = epsilon - tm.vec3(tr / 3.0, tr / 3.0, tr / 3.0)
+    epsilon_hat_norm = tm.length(epsilon_hat)
+    delta_gamma = (
+        epsilon_hat_norm
+        + (3.0 * model.lam[p] + 2.0 * model.mu[p])
+        / (2.0 * model.mu[p])
+        * tr
+        * model.alpha
+    )
 
-# @ti.kernel  ##### TODO: calculate the deformation gradients.
-# def compute_stress_from_F_trial(state: MPM_state, model: MPM_model, dt: ti.f32):
-#     for p in range(model.n_particles):
-#         if state.particle_selection[p] == 0:
-#             if model.material == 1:  # metal ??
-#                 state.particle_F[p] = von_mises_return_mapping(
-#                     state.particle_F_trial[p], model, p
-#                 )
-#             elif model.material == 2:  # sand  ??
-#                 state.particle_F[p] = sand_return_mapping(
-#                     state.particle_F_trial[p], state, model, p
-#                 )
-#             elif model.material == 3:  # visplas, with StVk + VM, no thickening ??
-#                 state.particle_F[p] = viscoplasticity_return_mapping_with_StVK(
-#                     state.particle_F_trial[p], model, p, dt
-#                 )
-#             elif model.material == 5:
-#                 state.particle_F[p] = von_mises_return_mapping_with_damage(
-#                     state.particle_F_trial[p], model, p
-#                 )
-#             else:  # elastic ??
-#                 state.particle_F[p] = state.particle_F_trial[p]
+    F_elastic = tm.mat3(0.0)
+    if delta_gamma <= 0:
+        F_elastic = F_trial
 
-#             J = ti.determinant(state.particle_F[p])
-#             # U = ti.Matrix.zero(ti.f32, 3, 3)
-#             # V = ti.Matrix.zero(ti.f32, 3, 3)
-#             # sig = ti.Vector.zero(ti.f32, 3)
-#             stress = ti.Matrix.zero(ti.f32, 3, 3)
-#             U, sig, V = ti.svd(state.particle_F[p])
+    if delta_gamma > 0 and tr > 0:
+        F_elastic = U * V.transpose()
 
-#             if model.material[p] == 0:
-#                 stress = kirchoff_stress_FCR(
-#                     state.particle_F[p], U, V, J, model.mu[p], model.lam[p]
-#                 )
-#             elif model.material == 1:
-#                 stress = kirchoff_stress_StVK(
-#                     state.particle_F[p], U, V, sig, model.mu[p], model.lam[p]
-#                 )
-#             elif model.material == 2:
-#                 stress = kirchoff_stress_Drucker_Prager(
-#                     state.particle_F[p], U, V, sig, model.mu[p], model.lam[p]
-#                 )
-#             elif model.material == 3:
-#                 stress = kirchoff_stress_StVK(
-#                     state.particle_F[p], U, V, sig, model.mu[p], model.lam[p]
-#                 )
+    if delta_gamma > 0 and tr <= 0:
+        H = epsilon - epsilon_hat * (delta_gamma / epsilon_hat_norm)
+        # s_new = tm.vec3(tm.exp(H[0]), tm.exp(H[1]), tm.exp(H[2]))
+        s_new = tm.exp(H)
 
-#             stress = (stress + stress.transpose()) / 2.0
-#             state.particle_stress[p] = stress
+        F_elastic = U * tm.mat3(s_new[0], 0.0, 0.0, 0.0, s_new[1], 0.0, 0.0, 0.0, s_new[2]) * V.transpose()
+    return F_elastic
+
+# for toothpaste
+@ti.func
+def viscoplasticity_return_mapping_with_StVK(F_trial, model, p, dt):
+    # U = wp.mat33(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    # V = wp.mat33(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    # sig_old = wp.vec3(0.0)
+    # wp.svd3(F_trial, U, sig_old, V)
+    U, sig_mat, V = ti.svd(F_trial)
+    sig_old = tm.vec3(sig_mat[0,0], sig_mat[1,1], sig_mat[2,2])
+
+    # sig = tm.vec3(
+    #     ti.max(sig_old[0], 0.01), ti.max(sig_old[1], 0.01), ti.max(sig_old[2], 0.01)
+    # )  # add this to prevent NaN in extrem cases
+    sig = ti.max(sig_old, 0.01)
+
+    b_trial = tm.vec3(sig[0] * sig[0], sig[1] * sig[1], sig[2] * sig[2])
+    # epsilon = tm.vec3(wp.log(sig[0]), wp.log(sig[1]), wp.log(sig[2]))
+    epsilon = ti.log(sig)
+    trace_epsilon = epsilon[0] + epsilon[1] + epsilon[2]
+    # epsilon_hat = epsilon - wp.vec3(
+    #     trace_epsilon / 3.0, trace_epsilon / 3.0, trace_epsilon / 3.0
+    # )
+    epsilon_hat = epsilon - tm.vec3(trace_epsilon / 3.0)
+    s_trial = 2.0 * model.mu[p] * epsilon_hat
+    s_trial_norm = tm.length(s_trial)
+    y = s_trial_norm - ti.sqrt(2.0 / 3.0) * model.yield_stress[p]
+    F = tm.mat3(0.0)
+    if y > 0:
+        mu_hat = model.mu[p] * (b_trial[0] + b_trial[1] + b_trial[2]) / 3.0
+        s_new_norm = s_trial_norm - y / (
+            1.0 + model.plastic_viscosity / (2.0 * mu_hat * dt)
+        )
+        s_new = (s_new_norm / s_trial_norm) * s_trial
+        epsilon_new = 1.0 / (2.0 * model.mu[p]) * s_new + tm.vec3(trace_epsilon / 3.0)
+        sig_elastic = tm.mat3(
+            tm.exp(epsilon_new[0]),
+            0.0,
+            0.0,
+            0.0,
+            tm.exp(epsilon_new[1]),
+            0.0,
+            0.0,
+            0.0,
+            tm.exp(epsilon_new[2]),
+        )
+        F = U * sig_elastic * V.transpose()
+    else:
+        F = F_trial
+    return F
+    
+@ti.func
+def von_mises_return_mapping_with_damage(F_trial, model, p):
+    # U = wp.mat33(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    # V = wp.mat33(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    # sig_old = wp.vec3(0.0)
+    # wp.svd3(F_trial, U, sig_old, V)
+    U, sig_mat, V = ti.svd(F_trial)
+    sig_old = tm.vec3(sig_mat[0,0], sig_mat[1,1], sig_mat[2,2])
+
+    # sig = wp.vec3(
+    #     wp.max(sig_old[0], 0.01), wp.max(sig_old[1], 0.01), wp.max(sig_old[2], 0.01)
+    # )  # add this to prevent NaN in extrem cases
+    sig = ti.max(sig_old, 0.01)
+    # epsilon = wp.vec3(wp.log(sig[0]), wp.log(sig[1]), wp.log(sig[2]))
+    epsilon = ti.log(sig)
+    temp = (epsilon[0] + epsilon[1] + epsilon[2]) / 3.0
+
+    tau = 2.0 * model.mu[p] * epsilon + model.lam[p] * (
+        epsilon[0] + epsilon[1] + epsilon[2]
+    ) * tm.vec3(1.0)
+    sum_tau = tau[0] + tau[1] + tau[2]
+    cond = tm.vec3(
+        tau[0] - sum_tau / 3.0, tau[1] - sum_tau / 3.0, tau[2] - sum_tau / 3.0
+    )
+    F = tm.mat3(0.0)
+    if tm.length(cond) > model.yield_stress[p]:
+        if model.yield_stress[p] <= 0:
+            F = F_trial
+        else:
+            epsilon_hat = epsilon - tm.vec3(temp)
+            epsilon_hat_norm = tm.length(epsilon_hat) + 1e-6
+            delta_gamma = epsilon_hat_norm - model.yield_stress[p] / (2.0 * model.mu[p])
+            epsilon = epsilon - (delta_gamma / epsilon_hat_norm) * epsilon_hat
+            model.yield_stress[p] = model.yield_stress[p] - model.softening * tm.length(
+                (delta_gamma / epsilon_hat_norm) * epsilon_hat
+            )
+            if model.yield_stress[p] <= 0:
+                model.mu[p] = 0.0
+                model.lam[p] = 0.0
+            sig_elastic = tm.mat3(
+                tm.exp(epsilon[0]),
+                0.0,
+                0.0,
+                0.0,
+                tm.exp(epsilon[1]),
+                0.0,
+                0.0,
+                0.0,
+                tm.exp(epsilon[2]),
+            )
+            F = U * sig_elastic * V.transpose()
+            if model.hardening == 1:
+                model.yield_stress[p] = (
+                    model.yield_stress[p] + 2.0 * model.mu[p] * model.xi * delta_gamma
+                )
+    else:
+        F = F_trial
+    return F
+
+@ti.kernel  ##### TODO: calculate the deformation gradients.
+def compute_stress_from_F_trial(state: ti.template(), model: ti.template(), dt: ti.f32):
+    for p in range(model.n_particles):
+        # if state.particle_selection[p] == 0: # What is particle selection here?
+        if model.material == 1:  # metal ??
+            state.particle_F[p] = von_mises_return_mapping(
+                state.particle_F_trial[p], model, p
+            )
+        elif model.material == 2:  # sand  ??
+            state.particle_F[p] = sand_return_mapping(
+                state.particle_F_trial[p], state, model, p
+            )
+        elif model.material == 3:  # visplas, with StVk + VM, no thickening ??
+            state.particle_F[p] = viscoplasticity_return_mapping_with_StVK(
+                state.particle_F_trial[p], model, p, dt
+            )
+        elif model.material == 5:
+            state.particle_F[p] = von_mises_return_mapping_with_damage(
+                state.particle_F_trial[p], model, p
+            )
+        else:  # elastic ??
+            state.particle_F[p] = state.particle_F_trial[p]
+
+        J = (state.particle_F[p]).determinant()
+        # U = ti.Matrix.zero(ti.f32, 3, 3)
+        # V = ti.Matrix.zero(ti.f32, 3, 3)
+        # sig = ti.Vector.zero(ti.f32, 3)
+        stress = ti.Matrix.zero(ti.f32, 3, 3)
+        U, sig_mat, V = ti.svd(state.particle_F[p])
+        sig = tm.vec3(sig_mat[0,0], sig_mat[1,1], sig_mat[2,2])
+
+        if model.material == 0:
+            stress = kirchoff_stress_FCR(
+                state.particle_F[p], U, V, J, model.mu[p], model.lam[p]
+            )
+        elif model.material == 1:
+            stress = kirchoff_stress_StVK(
+                state.particle_F[p], U, V, sig, model.mu[p], model.lam[p]
+            )
+        elif model.material == 2:
+            stress = kirchoff_stress_Drucker_Prager(
+                state.particle_F[p], U, V, sig, model.mu[p], model.lam[p]
+            )
+        elif model.material == 3:
+            stress = kirchoff_stress_StVK(
+                state.particle_F[p], U, V, sig, model.mu[p], model.lam[p]
+            )
+
+        stress = (stress + stress.transpose()) / 2.0
+        state.particle_stress[p] = stress
 
 
 @ti.func # model: MPM_state, w: tm.mat3, dw: tm.mat3, i: ti.int32, j: ti.int32, k: ti.int32

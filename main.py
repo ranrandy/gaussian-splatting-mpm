@@ -134,6 +134,10 @@ def simulate(model_args, mpm_args):
         [-0.2, -0.2, -0.2], # min bound
         [ 0.2,  0.2,  0.2], # max bound
     ])).cuda()
+    # influenced_region_bound = torch.tensor(np.array([
+    #     [-0.5, -0.5, -0.5], # min bound
+    #     [ 0.5,  0.5,  0.5], # max bound
+    # ])).cuda()
 
     max_bounded_gs_mask = (gaussians._xyz <= influenced_region_bound[1]).all(dim=1)
     min_bounded_gs_mask = (gaussians._xyz >= influenced_region_bound[0]).all(dim=1) 
@@ -169,10 +173,16 @@ def simulate(model_args, mpm_args):
         "material": "metal",
         "friction_angle": 35,
         "g": [0.0, 0.0, -0.0098],
+        # "g": [0.0, 0.0, 0],
         "density": 200.0,
+        "grid_lim": 2,
+        "n_grid": 100
     }
     mpm_solver.set_parameters_dict(material_params)
-    ###
+    # Test for adding a surface collider
+    point = [0.0, 0.0, -0.8]
+    normal = [0.0, 0.0, 1.0]
+    mpm_solver.add_surface_collider(point, normal)
 
     rendered_img_seq.append(rendered_img)
     imageio.imwrite(os.path.join(model_args.save_path, "images", f"{0:04d}.png"), to8b(rendered_img))
