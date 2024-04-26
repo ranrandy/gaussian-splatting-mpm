@@ -115,57 +115,64 @@ def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, de
         cov3D_precomp = None)
     return rendered_image.detach().cpu().numpy().transpose(1, 2, 0)
 
-def simulate(model_args, mpm_args):
+def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : RenderParams):
+
+    # ------------------------------------------ Settings ------------------------------------------
+    
+    # Model settings
     gaussians = load_model(model_args)
     viewpoint_cams = load_cameras(model_args)
 
-    # Get the init position
-    # means3D = gaussians.get_xyz
-    # opacity = gaussians.get_opacity
-    # scaling_modifier = 1.0
-    # cov3D_precomp = gaussians.get_covariance(scaling_modifier)
-    # scales = pc.get_scaling
-    # rotations = pc.get_rotation
-
     # Simulation settings
-    influenced_region_bound = torch.tensor(np.array(mpm_args.sim_area)).cuda()
+    influenced_region_bound = torch.tensor(np.array(sim_args.sim_area)).cuda()
 
     max_bounded_gs_mask = (gaussians._xyz <= influenced_region_bound[1]).all(dim=1)
     min_bounded_gs_mask = (gaussians._xyz >= influenced_region_bound[0]).all(dim=1) 
     simulatable_gs_mask = torch.logical_and(max_bounded_gs_mask, min_bounded_gs_mask)
     num_sim_gs = torch.sum(simulatable_gs_mask)
 
-    # Render settings
-    viewpoint_camera = viewpoint_cams[model_args.view_cam_idx]
-    viewpoint_camera.toCuda()
-
-    bg_color = [1, 1, 1] if model_args.white_background else [0, 0, 0]
-    background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
-
-    os.makedirs(os.path.join(model_args.output_path, "images"), exist_ok=True)
-
-    # Simulate
-    rendered_img_seq = []
-
-    ### Render Initial frame
     delta_means3D = torch.tensor([0.0, 0.0, 0.0]).repeat(num_sim_gs, 1).cuda()
     delta_rotations = torch.tensor([0.0, 0.0, 0.0, 0.0]).repeat(num_sim_gs, 1).cuda()
+
+    # Render settings
+    viewpoint_camera = viewpoint_cams[render_args.view_cam_idx]
+    viewpoint_camera.toCuda()
+
+    bg_color = [1, 1, 1] if render_args.white_background else [0, 0, 0]
+    background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+    
+    save_images_folder = os.path.join(render_args.output_path, "images")
+    os.makedirs(save_images_folder, exist_ok=True)
+    
+    rendered_img_seq = []
+
+    # ------------------------------------------ Initialization ------------------------------------------
+
+    means3D = gaussians.get_xyz
+    opacity = gaussians.get_opacity
+    # scaling_modifier = 1.0
+    # cov3D_precomp = gaussians.get_covariance(scaling_modifier)
+    # scales = pc.get_scaling
+    # rotations = pc.get_rotation
+
+    # ------------------------------------------ Simulate, Render, and Save ------------------------------------------
+
+    # Render Initial frame
     rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, delta_means3D, delta_rotations, background, model_args)
 
-    # ### Wilson 4.24 main update
+    # # Wilson 4.24 main update
     # n_grid = 100
-    # grid_lim = 1.0
-    # mpm_init_vol = get_particle_volume(delta_means3D, n_grid, grid_lim / n_grid).to(device="cuda:0")
+    # grid_extent = 1.0
+    # mpm_init_vol = get_particle_volume(means3D, n_grid, grid_extent / n_grid).to(device="cuda:0")
 
     # mpm_solver = MPM_Simulator(10)
-    # mpm_solver.load_initial_data_from_torch(delta_means3D, mpm_init_vol)
+    # mpm_solver.load_initial_data_from_torch(means3D, mpm_init_vol)
     # material_params = {
     #     "E": 2000,
     #     "nu": 0.2,
     #     "material": "metal",
     #     "friction_angle": 35,
     #     "g": [0.0, 0.0, -0.0098],
-    #     # "g": [0.0, 0.0, 0],
     #     "density": 200.0,
     #     "grid_lim": 2,
     #     "n_grid": 100
@@ -177,9 +184,9 @@ def simulate(model_args, mpm_args):
     # mpm_solver.add_surface_collider(point, normal)
 
     rendered_img_seq.append(rendered_img)
-    imageio.imwrite(os.path.join(model_args.output_path, "images", f"{0:04d}.png"), to8b(rendered_img))
+    imageio.imwrite(os.path.join(save_images_folder, f"{0:04d}.png"), to8b(rendered_img))
 
-    for fid in range(1, mpm_args.num_frames + 1):
+    for fid in range(1, render_args.num_frames + 1):
         ### MPM Step
         delta_means3D[:, 2] -= 0.05
 
@@ -196,9 +203,9 @@ def simulate(model_args, mpm_args):
         ### Render this frame
         rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, delta_means3D, delta_rotations, background, model_args)
         rendered_img_seq.append(rendered_img)
-        imageio.imwrite(os.path.join(model_args.output_path, "images", f"{fid:04d}.png"), to8b(rendered_img))
+        imageio.imwrite(os.path.join(save_images_folder, f"{fid:04d}.png"), to8b(rendered_img))
 
-    os.system(f"ffmpeg -framerate 25 -i {args.output_path}/images/%04d.png -c:v libx264 -s {viewpoint_camera.width}x{viewpoint_camera.height} -y -pix_fmt yuv420p {args.output_path}/simulated.mp4")
+    os.system(f"ffmpeg -framerate 25 -i {save_images_folder}/%04d.png -c:v libx264 -s {viewpoint_camera.width}x{viewpoint_camera.height} -y -pix_fmt yuv420p {render_args.output_path}/simulated.mp4")
 
     print("Done.")
 
@@ -213,10 +220,11 @@ if __name__ == "__main__":
 
     # Load the other argments
     parser = ArgumentParser(description="Simulation parameters")
-    model_args = ModelParams(parser, config)
-    mpm_args = MPMParams(parser, config)
+    model_args = ModelParams(parser, config["model"])
+    sim_args = MPMParams(parser, config["mpm"])
+    render_args = RenderParams(parser, config["render"])
     args = parser.parse_args(remaining_argv)
 
-    simulate(model_args.extract(args), mpm_args.extract(args))
+    simulate(model_args.extract(args), sim_args.extract(args), render_args.extract(args))
 
 

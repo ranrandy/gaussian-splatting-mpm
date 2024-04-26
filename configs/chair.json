@@ -1,12 +1,28 @@
 {
-    "model_path": "models/chair",
-    "output_path": "outputs/chair",
-    "sim_area": [
-        [-0.3, -0.3, -0.5],
-        [ 0.3,  0.3,  0.5]
-    ],
-    "view_cam_idx": 2,
-    "num_frames": 60,
-    "loaded_iter": 7000,
-    "white_background": true
+    "model": 
+    {
+        "model_path": "models/chair",
+        "white_background": true,
+        "loaded_iter": 7000
+    },
+    "mpm": 
+    {
+        "sim_area": [
+            [-0.3, -0.3, -0.5],
+            [ 0.3,  0.3,  0.5]
+        ],
+        "E": 2000,
+        "nu": 0.2,
+        "material": "metal",
+        "friction_angle": 35,
+        "density": 200.0,
+        "n_grid": 100,
+        "grid_extent": 2.0
+    },
+    "render": 
+    {
+        "output_path": "outputs/chair",
+        "view_cam_idx": 2,
+        "num_frames": 60
+    }
 }

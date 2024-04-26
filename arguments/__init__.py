@@ -1,6 +1,4 @@
-from argparse import ArgumentParser, Namespace
-import os
-import sys
+from argparse import ArgumentParser
 
 
 class GroupParams:
@@ -38,13 +36,7 @@ class ParamGroup:
 
 class ModelParams(ParamGroup): 
     def __init__(self, parser, json_params=None):
-
-        self._model_path = ""
-        self._output_path = ""
-        self._white_background = False
-        
-        self.view_cam_idx = 0
-        
+        self.model_path = ""
         self.loaded_iter = -1
         
         self.debug = False
@@ -54,9 +46,29 @@ class ModelParams(ParamGroup):
 
 class MPMParams(ParamGroup):
     def __init__(self, parser, json_params=None):
-
-        self.num_frames = 60
-
         self.sim_area = []
+
+        self.E = 2000
+        self.nu = 0.2
+        self.material = "metal"
+        self.friction_angle = 35
+
+        self.g = [0.0, 0.0, -9.8]
+        self.density = 200.0
+
+        self.n_grid = 100
+        self.grid_extent = 2.0
+
+        super().__init__(parser, "MPM Parameters", json_params)
+
+
+class RenderParams(ParamGroup):
+    def __init__(self, parser, json_params=None):
+        self.output_path = ""
+        self.white_background = False
+
+        self.view_cam_idx = 0
+        
+        self.num_frames = 60
 
         super().__init__(parser, "MPM Parameters", json_params)
