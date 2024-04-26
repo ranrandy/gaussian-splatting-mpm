@@ -7,7 +7,7 @@ class GroupParams:
     pass
 
 class ParamGroup:
-    def __init__(self, parser: ArgumentParser, name : str, fill_none = False):
+    def __init__(self, parser: ArgumentParser, name: str, json_params=None):
         group = parser.add_argument_group(name)
         for key, value in vars(self).items():
             shorthand = False
@@ -15,7 +15,8 @@ class ParamGroup:
                 shorthand = True
                 key = key[1:]
             t = type(value)
-            value = value if not fill_none else None 
+            if json_params and key in json_params:
+                value = json_params[key]
             if shorthand:
                 if t == bool:
                     group.add_argument("--" + key, ("-" + key[0:1]), default=value, action="store_true")
@@ -36,25 +37,26 @@ class ParamGroup:
 
 
 class ModelParams(ParamGroup): 
-    def __init__(self, parser, sentinel=False):
-        
+    def __init__(self, parser, json_params=None):
+
         self._model_path = ""
+        self._output_path = ""
         self._white_background = False
-
+        
         self.view_cam_idx = 0
-        self.save_path = ""
-
+        
         self.loaded_iter = -1
-
+        
         self.debug = False
         
-        super().__init__(parser, "Loading Parameters", sentinel)
+        super().__init__(parser, "Loading Parameters", json_params)
 
 
 class MPMParams(ParamGroup):
-    def __init__(self, parser):
-        
+    def __init__(self, parser, json_params=None):
+
         self.num_frames = 60
 
-        super().__init__(parser, "MPM Parameters")
+        self.sim_area = []
 
+        super().__init__(parser, "MPM Parameters", json_params)

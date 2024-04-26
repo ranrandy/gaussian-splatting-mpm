@@ -1,10 +1,13 @@
+h5py==3.10.0
 imageio==2.34.0
 numpy==1.26.4
 Pillow==10.3.0
 plyfile==1.0.3
+PyMCubes==0.1.4
 pymeshlab==2023.12.post1
 scipy==1.13.0
 setuptools==68.2.2
+taichi==1.5.0
 torch==2.0.0+cu118
-torchvision==0.17.2
+torchvision==0.18.0
 tqdm==4.66.2

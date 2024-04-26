@@ -127,15 +127,8 @@ def simulate(model_args, mpm_args):
     # scales = pc.get_scaling
     # rotations = pc.get_rotation
 
-    # Simulation settings --> will move to mpm_args
-    influenced_region_bound = torch.tensor(np.array([
-        [-0.2, -0.2, -0.2], # min bound
-        [ 0.2,  0.2,  0.2], # max bound
-    ])).cuda()
-    # influenced_region_bound = torch.tensor(np.array([
-    #     [-0.5, -0.5, -0.5], # min bound
-    #     [ 0.5,  0.5,  0.5], # max bound
-    # ])).cuda()
+    # Simulation settings
+    influenced_region_bound = torch.tensor(np.array(mpm_args.sim_area)).cuda()
 
     max_bounded_gs_mask = (gaussians._xyz <= influenced_region_bound[1]).all(dim=1)
     min_bounded_gs_mask = (gaussians._xyz >= influenced_region_bound[0]).all(dim=1) 
@@ -149,7 +142,7 @@ def simulate(model_args, mpm_args):
     bg_color = [1, 1, 1] if model_args.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
-    os.makedirs(os.path.join(model_args.save_path, "images"), exist_ok=True)
+    os.makedirs(os.path.join(model_args.output_path, "images"), exist_ok=True)
 
     # Simulate
     rendered_img_seq = []
@@ -158,68 +151,71 @@ def simulate(model_args, mpm_args):
     delta_means3D = torch.tensor([0.0, 0.0, 0.0]).repeat(num_sim_gs, 1).cuda()
     delta_rotations = torch.tensor([0.0, 0.0, 0.0, 0.0]).repeat(num_sim_gs, 1).cuda()
     rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, delta_means3D, delta_rotations, background, model_args)
-    rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, delta_means3D, background, model_args)
 
-    ### Wilson 4.24 main update
-    n_grid = 100
-    grid_lim = 1.0
-    mpm_init_vol = get_particle_volume(delta_means3D, n_grid, grid_lim / n_grid).to(device="cuda:0")
+    # ### Wilson 4.24 main update
+    # n_grid = 100
+    # grid_lim = 1.0
+    # mpm_init_vol = get_particle_volume(delta_means3D, n_grid, grid_lim / n_grid).to(device="cuda:0")
 
-    mpm_solver = MPM_Simulator(10)
-    mpm_solver.load_initial_data_from_torch(delta_means3D, mpm_init_vol)
-    material_params = {
-        "E": 2000,
-        "nu": 0.2,
-        "material": "metal",
-        "friction_angle": 35,
-        "g": [0.0, 0.0, -0.0098],
-        # "g": [0.0, 0.0, 0],
-        "density": 200.0,
-        "grid_lim": 2,
-        "n_grid": 100
-    }
-    mpm_solver.set_parameters_dict(material_params)
-    # Test for adding a surface collider
-    point = [0.0, 0.0, -0.8]
-    normal = [0.0, 0.0, 1.0]
-    mpm_solver.add_surface_collider(point, normal)
+    # mpm_solver = MPM_Simulator(10)
+    # mpm_solver.load_initial_data_from_torch(delta_means3D, mpm_init_vol)
+    # material_params = {
+    #     "E": 2000,
+    #     "nu": 0.2,
+    #     "material": "metal",
+    #     "friction_angle": 35,
+    #     "g": [0.0, 0.0, -0.0098],
+    #     # "g": [0.0, 0.0, 0],
+    #     "density": 200.0,
+    #     "grid_lim": 2,
+    #     "n_grid": 100
+    # }
+    # mpm_solver.set_parameters_dict(material_params)
+    # # Test for adding a surface collider
+    # point = [0.0, 0.0, -0.8]
+    # normal = [0.0, 0.0, 1.0]
+    # mpm_solver.add_surface_collider(point, normal)
 
     rendered_img_seq.append(rendered_img)
-    imageio.imwrite(os.path.join(model_args.save_path, "images", f"{0:04d}.png"), to8b(rendered_img))
+    imageio.imwrite(os.path.join(model_args.output_path, "images", f"{0:04d}.png"), to8b(rendered_img))
 
     for fid in range(1, mpm_args.num_frames + 1):
         ### MPM Step
-        delta_means3D[:, 0] += 0.05
-        ### TODO: delta_means3D, delta_rotation, ... = MPM_step(gaussians, mpm_args, ...)
+        delta_means3D[:, 2] -= 0.05
 
-        # ### Weekly Progress 1: Naive translation & rotation
-        # delta_means3D[:, 0] = delta_means3D[:, 0] + 0.05
+        # ### Weekly Progress 2: Sanity check for the p2g and g2p processes with gravity force
+        # substep_dt = 1e-4
+        # frame_dt = 4e-2
+        # step_per_frame = int(frame_dt / substep_dt)
 
-        ### Weekly Progress 2: Sanity check for the p2g and g2p processes with gravity force
-        substep_dt = 1e-4
-        frame_dt = 4e-2
-        step_per_frame = int(frame_dt / substep_dt)
+        # for step in range(1): # 200 # step_per_frame
+        #     mpm_solver.p2g2p_sanity_check(substep_dt)
 
-        for step in range(1): # 200 # step_per_frame
-            mpm_solver.p2g2p_sanity_check(substep_dt)
-
-        delta_means3D = mpm_solver.export_particle_x_to_torch().to(device="cuda:0")
+        # delta_means3D = mpm_solver.export_particle_x_to_torch().to(device="cuda:0")
         
         ### Render this frame
         rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, delta_means3D, delta_rotations, background, model_args)
         rendered_img_seq.append(rendered_img)
-        imageio.imwrite(os.path.join(model_args.save_path, "images", f"{fid:04d}.png"), to8b(rendered_img))
+        imageio.imwrite(os.path.join(model_args.output_path, "images", f"{fid:04d}.png"), to8b(rendered_img))
 
-    os.system(f"ffmpeg -framerate 25 -i {args.save_path}/images/%04d.png -c:v libx264 -s {viewpoint_camera.width}x{viewpoint_camera.height} -y -pix_fmt yuv420p {args.save_path}/simulated.mp4")
+    os.system(f"ffmpeg -framerate 25 -i {args.output_path}/images/%04d.png -c:v libx264 -s {viewpoint_camera.width}x{viewpoint_camera.height} -y -pix_fmt yuv420p {args.output_path}/simulated.mp4")
 
     print("Done.")
 
 
 if __name__ == "__main__":
+    # Load the config
+    config_parser = ArgumentParser(add_help=False)
+    config_parser.add_argument('--config_path', type=str, required=True)
+    config_args, remaining_argv = config_parser.parse_known_args()
+    with open(config_args.config_path, 'r') as f:
+        config = json.load(f)
+
+    # Load the other argments
     parser = ArgumentParser(description="Simulation parameters")
-    model_args = ModelParams(parser)
-    mpm_args = MPMParams(parser)
-    args = parser.parse_args(sys.argv[1:])
+    model_args = ModelParams(parser, config)
+    mpm_args = MPMParams(parser, config)
+    args = parser.parse_args(remaining_argv)
 
     simulate(model_args.extract(args), mpm_args.extract(args))
 

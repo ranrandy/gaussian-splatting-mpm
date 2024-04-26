@@ -1,0 +1,12 @@
+{
+    "model_path": "models/chair",
+    "output_path": "outputs/chair",
+    "sim_area": [
+        [-0.3, -0.3, -0.5],
+        [ 0.3,  0.3,  0.5]
+    ],
+    "view_cam_idx": 2,
+    "num_frames": 60,
+    "loaded_iter": 7000,
+    "white_background": true
+}
