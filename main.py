@@ -72,7 +72,7 @@ def load_cameras(args):
     return cameras
 
 
-def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, delta_means3D, bg_color, args, scaling_modifier = 1.0):
+def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, delta_means3D, delta_rotations, bg_color, args, scaling_modifier = 1.0):
     '''
         Rasterize the Gaussian cloud
     '''
@@ -93,15 +93,14 @@ def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, de
         sh_degree=pc.active_sh_degree,
         campos=viewpoint_camera.cam_center,
         prefiltered=False,
-        debug=args.debug
-    )
+        debug=args.debug)
     rasterizer = GaussianRasterizer(raster_settings=raster_settings)
 
     # Rasterize visible Gaussians to image, obtain their radii (on screen). 
     means3D = torch.cat([pc.get_xyz[~sim_gs_mask], pc.get_xyz[sim_gs_mask] + delta_means3D], dim=0)
     opacity = torch.cat([pc.get_opacity[~sim_gs_mask], pc.get_opacity[sim_gs_mask]], dim=0)
     scales = torch.cat([pc.get_scaling[~sim_gs_mask], pc.get_scaling[sim_gs_mask]], dim=0)
-    rotations = torch.cat([pc.get_rotation[~sim_gs_mask], pc.get_rotation[sim_gs_mask]], dim=0)
+    rotations = torch.cat([pc.get_rotation[~sim_gs_mask], pc.get_rotation[sim_gs_mask] + delta_rotations], dim=0)
     shs = torch.cat([pc.get_features[~sim_gs_mask], pc.get_features[sim_gs_mask]], dim=0)
 
     rendered_image, _ = rasterizer(
@@ -114,7 +113,6 @@ def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, de
         rotations = rotations,
         cov3D_precomp = None)
     return rendered_image.detach().cpu().numpy().transpose(1, 2, 0)
-
 
 def simulate(model_args, mpm_args):
     gaussians = load_model(model_args)
@@ -141,25 +139,22 @@ def simulate(model_args, mpm_args):
 
     os.makedirs(os.path.join(model_args.save_path, "images"), exist_ok=True)
 
-
     # Simulate
     rendered_img_seq = []
 
     ### Render Initial frame
     delta_means3D = torch.tensor([0.0, 0.0, 0.0]).repeat(num_sim_gs, 1).cuda()
-    rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, delta_means3D, background, model_args)
+    delta_rotations = torch.tensor([0.0, 0.0, 0.0, 0.0]).repeat(num_sim_gs, 1).cuda()
+    rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, delta_means3D, delta_rotations, background, model_args)
     rendered_img_seq.append(rendered_img)
     imageio.imwrite(os.path.join(model_args.save_path, "images", f"{0:04d}.png"), to8b(rendered_img))
 
     for fid in range(1, mpm_args.num_frames + 1):
         ### MPM Step
-        ### TODO: delta_means3D, delta_rotation, ... = MPM_step(gaussians, mpm_args, ...)
-
-        ### Weekly Progress 1: Naive translation & rotation
-        delta_means3D[:, 0] = delta_means3D[:, 0] + 0.05
+        delta_means3D[:, 0] += 0.05
         
         ### Render this frame
-        rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, delta_means3D, background, model_args)
+        rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, delta_means3D, delta_rotations, background, model_args)
         rendered_img_seq.append(rendered_img)
         imageio.imwrite(os.path.join(model_args.save_path, "images", f"{fid:04d}.png"), to8b(rendered_img))
 
