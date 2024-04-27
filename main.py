@@ -3,7 +3,7 @@ import sys
 import json
 from argparse import ArgumentParser
 from arguments import *
-from mpm_solver.mpm_solver_main import *
+from mpm_solver.solver import *
 from internel_filling.filling import *
 
 import math
@@ -17,9 +17,11 @@ from gaussian_splatting.scene import GaussianModel
 from gaussian_splatting.utils.system_utils import searchForMaxIteration
 
 import imageio
-from gaussian_splatting.utils.graphics_utils import focal2fov, getProjectionMatrix, getWorld2View
+from gaussian_splatting.utils.graphics_utils import focal2fov, getProjectionMatrix
 from utils.render_utils import TinyCam, to8b
+from utils.transform_utils import *
 
+ti.init(arch=ti.cuda)
 
 
 def load_model(args):
@@ -99,7 +101,7 @@ def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, de
 
     # Rasterize visible Gaussians to image, obtain their radii (on screen). 
     means3D = torch.cat([pc.get_xyz[~sim_gs_mask], pc.get_xyz[sim_gs_mask] + delta_means3D], dim=0)
-    opacity = torch.cat([pc.get_opacity[~sim_gs_mask], pc.get_opacity[sim_gs_mask]], dim=0)
+    opacities = torch.cat([pc.get_opacity[~sim_gs_mask], pc.get_opacity[sim_gs_mask]], dim=0)
     scales = torch.cat([pc.get_scaling[~sim_gs_mask], pc.get_scaling[sim_gs_mask]], dim=0)
     rotations = torch.cat([pc.get_rotation[~sim_gs_mask], pc.get_rotation[sim_gs_mask] + delta_rotations], dim=0)
     shs = torch.cat([pc.get_features[~sim_gs_mask], pc.get_features[sim_gs_mask]], dim=0)
@@ -109,11 +111,16 @@ def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, de
         means2D = None,
         shs = shs,
         colors_precomp = None,
-        opacities = opacity,
+        opacities = opacities,
         scales = scales,
         rotations = rotations,
         cov3D_precomp = None)
     return rendered_image.detach().cpu().numpy().transpose(1, 2, 0)
+
+def save_frame(frame, save_path, fid, save_seq):
+    save_seq.append(frame)
+    imageio.imwrite(os.path.join(save_path, f"{fid:04d}.png"), to8b(frame))
+
 
 def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : RenderParams):
 
@@ -130,6 +137,8 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     min_bounded_gs_mask = (gaussians._xyz >= influenced_region_bound[0]).all(dim=1) 
     simulatable_gs_mask = torch.logical_and(max_bounded_gs_mask, min_bounded_gs_mask)
     num_sim_gs = torch.sum(simulatable_gs_mask)
+
+    print(f"Number of simulatable Gaussians: {num_sim_gs}")
 
     delta_means3D = torch.tensor([0.0, 0.0, 0.0]).repeat(num_sim_gs, 1).cuda()
     delta_rotations = torch.tensor([0.0, 0.0, 0.0, 0.0]).repeat(num_sim_gs, 1).cuda()
@@ -148,62 +157,40 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
 
     # ------------------------------------------ Initialization ------------------------------------------
 
-    means3D = gaussians.get_xyz
-    opacity = gaussians.get_opacity
-    # scaling_modifier = 1.0
-    # cov3D_precomp = gaussians.get_covariance(scaling_modifier)
-    # scales = pc.get_scaling
-    # rotations = pc.get_rotation
+    sim_means3D = gaussians.get_xyz[simulatable_gs_mask]
+    sim_scales = gaussians.get_scaling[simulatable_gs_mask]
+    sim_rotations = gaussians.get_rotation[simulatable_gs_mask]
+
+    transformed_sim_means3D, transformed_sim_covs = world2grid(sim_means3D, sim_scales, sim_rotations, sim_args, gaussians.covariance_activation)
+    sim_volumes = get_particle_volume(transformed_sim_means3D, sim_args).to(device="cuda")
+
+    mpm_solver = MPM_Simulator(transformed_sim_means3D, transformed_sim_covs, sim_volumes, sim_args)
+    
+    # Test for adding a surface collider
+    point = [0.0, 0.0, -0.8]
+    normal = [0.0, 0.0, 1.0]
+    mpm_solver.add_surface_collider(point, normal)
 
     # ------------------------------------------ Simulate, Render, and Save ------------------------------------------
 
-    # Render Initial frame
+    # Render initial frame
     rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, delta_means3D, delta_rotations, background, model_args)
-
-    # # Wilson 4.24 main update
-    # n_grid = 100
-    # grid_extent = 1.0
-    # mpm_init_vol = get_particle_volume(means3D, n_grid, grid_extent / n_grid).to(device="cuda:0")
-
-    # mpm_solver = MPM_Simulator(10)
-    # mpm_solver.load_initial_data_from_torch(means3D, mpm_init_vol)
-    # material_params = {
-    #     "E": 2000,
-    #     "nu": 0.2,
-    #     "material": "metal",
-    #     "friction_angle": 35,
-    #     "g": [0.0, 0.0, -0.0098],
-    #     "density": 200.0,
-    #     "grid_lim": 2,
-    #     "n_grid": 100
-    # }
-    # mpm_solver.set_parameters_dict(material_params)
-    # # Test for adding a surface collider
-    # point = [0.0, 0.0, -0.8]
-    # normal = [0.0, 0.0, 1.0]
-    # mpm_solver.add_surface_collider(point, normal)
-
-    rendered_img_seq.append(rendered_img)
-    imageio.imwrite(os.path.join(save_images_folder, f"{0:04d}.png"), to8b(rendered_img))
+    save_frame(rendered_img, save_images_folder, 0, rendered_img_seq)
 
     for fid in range(1, render_args.num_frames + 1):
         ### MPM Step
-        delta_means3D[:, 2] -= 0.05
+        substep_dt = 1e-4
+        frame_dt = 4e-2
+        step_per_frame = int(frame_dt / substep_dt)
 
-        # ### Weekly Progress 2: Sanity check for the p2g and g2p processes with gravity force
-        # substep_dt = 1e-4
-        # frame_dt = 4e-2
-        # step_per_frame = int(frame_dt / substep_dt)
+        for _ in range(step_per_frame):
+            mpm_solver.p2g2p_sanity_check(substep_dt)
 
-        # for step in range(1): # 200 # step_per_frame
-        #     mpm_solver.p2g2p_sanity_check(substep_dt)
-
-        # delta_means3D = mpm_solver.export_particle_x_to_torch().to(device="cuda:0")
+        delta_means3D = mpm_solver.export_particle_x_to_torch().to(device="cuda")
         
-        ### Render this frame
+        ### Render current frame
         rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, delta_means3D, delta_rotations, background, model_args)
-        rendered_img_seq.append(rendered_img)
-        imageio.imwrite(os.path.join(save_images_folder, f"{fid:04d}.png"), to8b(rendered_img))
+        save_frame(rendered_img, save_images_folder, fid, rendered_img_seq)
 
     os.system(f"ffmpeg -framerate 25 -i {save_images_folder}/%04d.png -c:v libx264 -s {viewpoint_camera.width}x{viewpoint_camera.height} -y -pix_fmt yuv420p {render_args.output_path}/simulated.mp4")
 

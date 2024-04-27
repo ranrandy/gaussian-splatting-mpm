@@ -2,10 +2,16 @@ import taichi as ti
 import taichi.math as tm
 import torch
 import numpy as np
-from mpm_solver.mpm_model import *
+from mpm_solver.model import *
 
-ti.init(arch=ti.cuda)
-
+material_types = {
+    "jelly": 0,
+    "metal": 1,
+    "sand": 2,
+    "foam": 3,
+    "snow": 4,
+    "plasticine": 5,
+}
 
 # Functions used to compute stress from the deformation gradient F
 # F: ti.Matrix, U: ti.Matrix, V: ti.Matrix, J: ti.f32, mu: ti.f32, lam: ti.f32
@@ -541,18 +547,6 @@ def g2p(state: ti.template(), model: ti.template(), dt: ti.f32):
 # p2g_apic_with_stress, grid_normalization_and_gravity, !add_damping_via_grid, (!grid_postprocess), g2p
 
 
-# @ti.func
-def set_vec3_to_zero(target_array):
-    for i in range(target_array.shape[0]):
-        target_array[i] = ti.Vector([0.0, 0.0, 0.0])
-
-
-# @ti.func
-def set_mat33_to_identity(target_array):
-    for i in range(target_array.shape[0]):
-        target_array[i] = ti.Matrix([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
-
-
 @ti.kernel
 def set_value_to_float_array(target_array: ti.template(), value: ti.f32):
     for i in target_array:
@@ -595,10 +589,15 @@ def compute_mu_lam_from_E_nu(
         lam[p] = E[p] * nu[p] / ((1.0 + nu[p]) * (1.0 - 2.0 * nu[p]))
 
 
-@ti.func
-def multiply_and_update_density_mass(particle_density, particle_vol, particle_mass):
-    for i in range(particle_density.shape[0]):
-        particle_mass[i] = particle_density[i] * particle_vol[i]
+@ti.kernel
+def compute_mass_from_vol_density(
+    n_particles: ti.int32,
+    density: ti.template(), 
+    vol: ti.template(), 
+    mass: ti.template()
+):
+    for i in range(n_particles):
+        mass[i] = density[i] * vol[i]
 
 
 @ti.kernel
@@ -660,18 +659,3 @@ def compute_cov_from_F(state: ti.template(), model: ti.template()):
         state.particle_cov[6 * p + 5] = cov[2, 2]
 
 
-def taichi_to_torch(ti_field):
-    field_np = ti_field.to_numpy()
-    return torch.tensor(field_np)
-
-
-def taichi_field_to_torch(ti_field, n_particles):
-    # Create a NumPy array to hold the data
-    np_array = np.zeros((n_particles, 6), dtype=np.float32)
-
-    # Transfer data from Taichi to NumPy
-    for i in range(n_particles):
-        for j in range(6):
-            np_array[i, j] = ti_field[6 * i + j]
-
-    return torch.from_numpy(np_array)

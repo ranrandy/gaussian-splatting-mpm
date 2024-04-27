@@ -51,9 +51,8 @@ class MPMParams(ParamGroup):
         self.E = 2000
         self.nu = 0.2
         self.material = "metal"
-        self.friction_angle = 35
 
-        self.g = [0.0, 0.0, -9.8]
+        self.global_force = [0.0, 0.0, -9.8] # gravity by default
         self.density = 200.0
 
         self.n_grid = 100
