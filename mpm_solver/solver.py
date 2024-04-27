@@ -3,6 +3,7 @@ import taichi.math as tm
 from mpm_solver.model import *
 from mpm_solver.utils import *
 from mpm_solver.collider import *
+from mpm_solver.boundary_conditions import *
 
 
 @ti.data_oriented
@@ -14,16 +15,57 @@ class MPM_Simulator:
 
         self.time = 0.0
 
-        # Post-processing and boundary conditions
-        self.grid_postprocess = []
-        self.collider_params = []
-        self.modify_bc = []
+        self.collider_params = {}
 
-        self.pre_p2g_operations = []
-        self.impulse_params = []
+        self.impulse_params = None
 
-        self.particle_velocity_modifiers = []
-        self.particle_velocity_modifier_params = []
+        self.preprocess = []
+        self.postprocess = []
+
+    def p2g2p(self, dt: ti.f32):
+        self.mpm_state.reset_grid_state()
+
+        for k in range(len(self.preprocess)):
+            if self.preprocess[k][-1](self.time, self.impulse_params):
+                self.preprocess[k][0](dt, self.mpm_state, self.impulse_params)
+        
+        compute_stress_from_F_trial(self.mpm_state, self.mpm_model, dt)
+        
+        # Particle to Grid
+        p2g(self.mpm_state, self.mpm_model, dt)
+        
+        grid_normalization_and_gravity(self.mpm_state, self.mpm_model, dt)
+
+        for f in range(len(self.postprocess)):
+            self.postprocess[f](self.time, dt, self.mpm_state, self.mpm_model, self.collider_params[f])
+        
+        # Grid to Particle
+        # g2p(self.mpm_state, self.mpm_model, dt)
+        
+        self.time += dt
+
+    def set_boundary_conditions(self, bc_args_arr, args : MPMParams):
+        for bc_args in bc_args_arr:
+            
+            if bc_args["type"] == "cuboid":
+                pass
+            
+            elif bc_args["type"] == "impulse":
+                self.impulse_params = ImpulseParams(
+                    bc_args["start_time"],
+                    bc_args["start_time"] + args.frame_dt * bc_args["num_dt"],
+                    ti.Vector(bc_args["force"])
+                )
+                
+                @ti.kernel
+                def add_impulse(dt: float, state: ti.template(), args : ti.template()):
+                    for p in range(self.n_particles):
+                        state.particle_vel[p] = state.particle_vel[p] + args.force / state.particle_mass[p] * dt
+                
+                def add_impulse_condition(time, args):
+                    return time >= args.start_time and time < args.end_time
+
+                self.preprocess.append([add_impulse, add_impulse_condition])
 
     # a surface specified by a point and the normal vector
     def add_surface_collider(
@@ -85,13 +127,5 @@ class MPM_Simulator:
         self.grid_postprocess.append(collide)
         self.modify_bc.append(None)
 
-    def p2g2p_sanity_check(self, dt: ti.f32):
-        reset_grid_state(self.mpm_state, self.mpm_model)
-        compute_stress_from_F_trial(self.mpm_state, self.mpm_model, dt)
-        p2g_apic_with_stress(self.mpm_state, self.mpm_model, dt)
-        grid_normalization_and_gravity(self.mpm_state, self.mpm_model, dt)
-        for f in range (len(self.grid_postprocess)):
-            self.grid_postprocess[f](self.time, dt, self.mpm_state, self.mpm_model, self.collider_params[f])
-        g2p(self.mpm_state, self.mpm_model, dt)
-        self.time += dt
+
 

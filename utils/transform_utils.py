@@ -10,5 +10,9 @@ def world2grid(means3D : torch.tensor, scales : torch.tensor, rotations : torch.
     transformed_means3D = (means3D - pos_center) * scaling_modifier + torch.ones(3).cuda() * sim_args.grid_extent / 2.0
     transformed_covs = get_covariance(scales, scaling_modifier, rotations)
 
-    return transformed_means3D, transformed_covs
+    return transformed_means3D, transformed_covs, pos_center, scaling_modifier 
 
+
+def grid2world(means3D : torch.tensor, covs : torch.tensor, scaling_modifier, pos_center, sim_args : MPMParams):
+    transformed_means3D = (means3D - torch.ones(3).cuda() * sim_args.grid_extent / 2.0) / scaling_modifier + pos_center
+    return transformed_means3D

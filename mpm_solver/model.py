@@ -2,6 +2,7 @@ import taichi as ti
 from arguments import *
 from mpm_solver.utils import material_types, compute_mu_lam_from_E_nu, compute_mass_from_vol_density
 
+
 @ti.data_oriented
 class MPM_model:
     def __init__(self, n_particles : int, args : MPMParams):
@@ -22,12 +23,11 @@ class MPM_model:
 
     def init_general_params(self):
         self.material = material_types.get(self.args.material, -1)
-        if self.material == -1:
-            raise TypeError("Material not supported")
+        if self.material != 0:
+            raise TypeError("Material not supported yet")
 
-        self.global_force = ti.Vector(self.args.global_force)
+        self.gravity = ti.Vector([0.0, 0.0, -9.81]) #ti.Vector(self.args.gravity)
 
-        # self.rpic_damping = 0.0
         # self.grid_v_damping_scale = 1.1
 
     def init_elasiticity_params(self):
@@ -92,13 +92,14 @@ class MPM_state:
         
         self.particle_F_trial.fill(0.0)
 
-        # Grid state declarations
+        # Grid states
         grid_shape = (args.n_grid, args.n_grid, args.n_grid)
         self.grid_mass = ti.field(dtype=ti.f32, shape=grid_shape)                       # Grid mass
         self.grid_v_in = ti.Vector.field(3, dtype=ti.f32, shape=grid_shape)             # Grid momentum (before update)
         self.grid_v_out = ti.Vector.field(3, dtype=ti.f32, shape=grid_shape)            # Grid velocity (after update)
+        self.reset_grid_state()
 
-        # Grid state initializations
+    def reset_grid_state(self):
         self.grid_mass.fill(0.0)
         self.grid_v_in.fill(0.0)
         self.grid_v_out.fill(0.0)

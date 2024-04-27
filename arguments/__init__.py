@@ -46,19 +46,34 @@ class ModelParams(ParamGroup):
 
 class MPMParams(ParamGroup):
     def __init__(self, parser, json_params=None):
-        self.sim_area = []
+        self.sim_area = [
+            [-1.0, -1.0, -1.0],
+            [ 1.0,  1.0,  1.0]
+        ]
+        
+        self.E = 2e6
+        self.nu = 0.4
+        self.material = "jelly"
 
-        self.E = 2000
-        self.nu = 0.2
-        self.material = "metal"
-
-        self.global_force = [0.0, 0.0, -9.8] # gravity by default
+        self.gravity = [0.0, 0.0, -9.81]
         self.density = 200.0
 
         self.n_grid = 100
         self.grid_extent = 2.0
 
+        self.substep_dt = 1e-4
+        self.frame_dt = 4e-2
+
+        self.boundary_conditions = []
+
         super().__init__(parser, "MPM Parameters", json_params)
+    
+    def extract(self, args):
+        g = super().extract(args)
+        
+        g.steps_per_frame = int(g.frame_dt / g.substep_dt)
+        
+        return g
 
 
 class RenderParams(ParamGroup):
@@ -70,4 +85,4 @@ class RenderParams(ParamGroup):
         
         self.num_frames = 60
 
-        super().__init__(parser, "MPM Parameters", json_params)
+        super().__init__(parser, "Render Parameters", json_params)
