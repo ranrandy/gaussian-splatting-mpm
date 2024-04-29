@@ -21,7 +21,14 @@
         "frame_dt": 4e-2,
         "gravity": [0.0, 0.0, 0.0],
         "boundary_conditions": [
-
+            {
+                "id": 0,
+                "type": "fixed_cube",
+                "center": [1.0, 0.8, 0.5],
+                "size": [1.0, 0.2, 0.3],
+                "start_time": 0,
+                "num_dt": 10000
+            },
             {
                 "id": 1,
                 "type": "impulse",
