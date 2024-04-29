@@ -1,0 +1,27 @@
+{
+    "model": 
+    {
+        "model_path": "models/chair",
+        "white_background": true,
+        "loaded_iter": 7000
+    },
+    "mpm": 
+    {
+        "sim_area": [
+            [-0.3, -0.3, -0.5],
+            [ 0.3,  0.3,  0.5]
+        ],
+        "E": 2000,
+        "nu": 0.2,
+        "material": "metal",
+        "density": 200.0,
+        "n_grid": 100,
+        "grid_extent": 2.0
+    },
+    "render": 
+    {
+        "output_path": "outputs/chair",
+        "view_cam_idx": 2,
+        "num_frames": 60
+    }
+}
