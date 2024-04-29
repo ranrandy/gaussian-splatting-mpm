@@ -270,7 +270,7 @@ def compute_mass_from_vol_density(
 def compute_R_from_F(state: ti.template(), model: ti.template()):
     for p in range(model.n_particles):
         # F = state.particle_F_trial[p]
-        F = state.particle_F[p]
+        F = state.particle_F_trial[p]
         # U = ti.Matrix.zero(ti.f32, 3, 3)
         # V = ti.Matrix.zero(ti.f32, 3, 3)
         # sig = ti.Vector.zero(ti.f32, 3)
@@ -294,7 +294,7 @@ def compute_R_from_F(state: ti.template(), model: ti.template()):
 @ti.kernel
 def compute_cov_from_F(state: ti.template(), model: ti.template()):
     for p in range(model.n_particles):
-        F = state.particle_F[p]
+        F = state.particle_F_trial[p]
 
         init_cov = ti.Matrix(
             [

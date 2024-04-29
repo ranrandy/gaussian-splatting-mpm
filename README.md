@@ -25,8 +25,8 @@ python main.py --config_path configs/chair.json --output_path output/chair_gravi
 
 ## Results
 
-### Naive Translation
-![naive-translation](outputs/mic_translation/simulated.gif)
+### Elastic Lego
+![elastic-lego](outputs/lego_elastic/simulated.gif)
 
 ## Extra Features
 

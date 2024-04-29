@@ -13,16 +13,16 @@ class BasicBC:
         self.type = bc_args["type"]
         
         self.start_time = bc_args["start_time"]
-        self.end_time = bc_args["start_time"] + sim_args.frame_dt * bc_args["num_dt"]
+        self.end_time = bc_args["start_time"] + sim_args.substep_dt * bc_args["num_dt"]
 
         self.center = bc_args["center"]
         self.size = bc_args["size"]
 
     @ti.kernel
-    def apply(self, state : ti.template()):
-        for p in range(self.n_particles):
-            if all(ti.abs(state.particle_xyz[p] - self.center) < self.size):
-                state.particle_vel[p] = ti.Vector([0.0, 0.0, 0.0])
+    def apply(self, state : ti.template(), dx : float):
+        for grid_xyz in ti.grouped(state.grid_v_out):
+            if all(ti.abs(grid_xyz * dx - self.center) < self.size):
+                state.grid_v_out[grid_xyz] = ti.Vector([0.0, 0.0, 0.0])
         
 
     def isActive(self, time):
@@ -39,7 +39,7 @@ class ImpulseBC(BasicBC):
     @ti.kernel
     def apply(self, state : ti.template()):
         for p in range(self.n_particles):
-            if all(ti.abs(state.particle_xyz[p] - self.center) < self.size):
+            if all(ti.abs(state.particle_xyz[p] - self.center) < self.size): #TODO: Need to replace this with a mask
                 state.particle_vel[p] = state.particle_vel[p] + self.force / state.particle_mass[p] * self.substep_dt
 
 

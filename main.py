@@ -76,7 +76,7 @@ def load_cameras(args):
     return cameras
 
 
-def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, sim_means3D, bg_color, args, scaling_modifier = 1.0):
+def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, sim_means3D, sim_covs, bg_color, args, scaling_modifier = 1.0):
     '''
         Rasterize the Gaussian cloud
     '''
@@ -103,9 +103,8 @@ def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, si
     # Rasterize visible Gaussians to image, obtain their radii (on screen). 
     means3D = torch.cat([pc.get_xyz[~sim_gs_mask], sim_means3D], dim=0)
     opacities = torch.cat([pc.get_opacity[~sim_gs_mask], pc.get_opacity[sim_gs_mask]], dim=0)
-    scales = torch.cat([pc.get_scaling[~sim_gs_mask], pc.get_scaling[sim_gs_mask]], dim=0)
-    rotations = torch.cat([pc.get_rotation[~sim_gs_mask], pc.get_rotation[sim_gs_mask]], dim=0)
     shs = torch.cat([pc.get_features[~sim_gs_mask], pc.get_features[sim_gs_mask]], dim=0)
+    covs = torch.cat([pc.get_covariance()[~sim_gs_mask], sim_covs], dim=0)
 
     rendered_image, _ = rasterizer(
         means3D = means3D,
@@ -113,9 +112,9 @@ def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, si
         shs = shs,
         colors_precomp = None,
         opacities = opacities,
-        scales = scales,
-        rotations = rotations,
-        cov3D_precomp = None)
+        scales = None,
+        rotations = None,
+        cov3D_precomp = covs)
     return rendered_image.detach().cpu().numpy().transpose(1, 2, 0)
 
 def save_frame(frame, save_path, fid, save_seq):
@@ -155,11 +154,12 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
 
     # ------------------------------------------ Initialization ------------------------------------------
 
-    sim_means3D = gaussians.get_xyz[simulatable_gs_mask].detach().clone().cpu()
-    sim_scales = gaussians.get_scaling[simulatable_gs_mask].detach().clone().cpu()
-    sim_rotations = gaussians.get_rotation[simulatable_gs_mask].detach().clone().cpu()
+    sim_means3D = gaussians.get_xyz[simulatable_gs_mask].detach()
+    sim_covs = gaussians.get_covariance()[simulatable_gs_mask].detach()
 
-    transformed_sim_means3D, transformed_sim_covs, pos_center, scaling_modifier = world2grid(sim_means3D, sim_scales, sim_rotations, sim_args, gaussians.covariance_activation)
+    transformed_sim_means3D, pos_center, scaling_modifier = world2grid(sim_means3D, sim_args)
+    transformed_sim_covs = sim_covs * (scaling_modifier * scaling_modifier)
+    
     sim_volumes = get_particle_volume(transformed_sim_means3D, sim_args)
 
     mpm_solver = MPM_Simulator(transformed_sim_means3D, transformed_sim_covs, sim_volumes, sim_args)
@@ -173,20 +173,24 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     # ------------------------------------------ Simulate, Render, and Save ------------------------------------------
 
     # Render initial frame
-    rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, sim_means3D.cuda(), background, model_args)
+    rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, sim_means3D, sim_covs, background, model_args)
     save_frame(rendered_img, save_images_folder, 0, rendered_img_seq)
 
     for fid in tqdm(range(1, render_args.num_frames + 1)):
         # MPM Steps
-        for ffid in range(sim_args.steps_per_frame):
+        for _ in range(sim_args.steps_per_frame):
             mpm_solver.p2g2p(sim_args.substep_dt)
 
-            sim_means3D = grid2world(mpm_solver.mpm_state.particle_xyz.to_torch().cpu(), mpm_solver.mpm_state.particle_cov.to_torch().cpu(), scaling_modifier, pos_center, sim_args)
+        mpm_solver.postprocess()
+
+        sim_means3D, sim_covs = grid2world(
+            mpm_solver.mpm_state.particle_xyz.to_torch().cuda(), 
+            mpm_solver.mpm_state.particle_cov.to_torch().cuda(), 
+            scaling_modifier, pos_center, sim_args)
         
-            # Render current frame
-            rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, sim_means3D.cuda(), background, model_args)
-            save_frame(rendered_img, save_images_folder, fid * ffid, rendered_img_seq)
-            # print(mpm_solver.mpm_state.particle_xyz.to_torch().min(dim=0)[0], mpm_solver.mpm_state.particle_xyz.to_torch().max(dim=0)[0])
+        # Render current frame
+        rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, sim_means3D, sim_covs, background, model_args)
+        save_frame(rendered_img, save_images_folder, fid, rendered_img_seq)
 
     os.system(f"ffmpeg -framerate 25 -i {save_images_folder}/%04d.png -c:v libx264 -s {viewpoint_camera.width}x{viewpoint_camera.height} -y -pix_fmt yuv420p {render_args.output_path}/simulated.mp4")
 

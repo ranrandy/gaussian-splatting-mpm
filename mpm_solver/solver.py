@@ -36,7 +36,7 @@ class MPM_Simulator:
         grid_normalization_and_gravity(self.mpm_state, self.mpm_model, dt)
         for gp in self.grid_postprocess:
             if gp.isActive(self.time):
-                gp.apply(self.mpm_state)
+                gp.apply(self.mpm_state, self.mpm_model.dx)
         
         # Grid to Particle
         g2p(self.mpm_state, self.mpm_model, dt)
@@ -54,6 +54,10 @@ class MPM_Simulator:
             
             if bc.type in postprocess_bc:
                 self.grid_postprocess.append(bc)
+
+    def postprocess(self):
+        compute_cov_from_F(self.mpm_state, self.mpm_model)
+        compute_R_from_F(self.mpm_state, self.mpm_model)
 
     # a surface specified by a point and the normal vector
     def add_surface_collider(
