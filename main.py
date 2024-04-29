@@ -16,6 +16,7 @@ from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianR
 from gaussian_splatting.scene import GaussianModel
 from gaussian_splatting.utils.system_utils import searchForMaxIteration
 
+from tqdm import tqdm
 import imageio
 from gaussian_splatting.utils.graphics_utils import focal2fov, getProjectionMatrix
 from utils.render_utils import TinyCam, to8b
@@ -133,8 +134,8 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     # Simulation settings
     influenced_region_bound = torch.tensor(np.array(sim_args.sim_area)).cuda()
 
-    max_bounded_gs_mask = (gaussians._xyz <= influenced_region_bound[1]).all(dim=1)
-    min_bounded_gs_mask = (gaussians._xyz >= influenced_region_bound[0]).all(dim=1) 
+    max_bounded_gs_mask = (gaussians.get_xyz <= influenced_region_bound[1]).all(dim=1)
+    min_bounded_gs_mask = (gaussians.get_xyz >= influenced_region_bound[0]).all(dim=1) 
     simulatable_gs_mask = torch.logical_and(max_bounded_gs_mask, min_bounded_gs_mask)
     num_sim_gs = torch.sum(simulatable_gs_mask)
 
@@ -154,12 +155,12 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
 
     # ------------------------------------------ Initialization ------------------------------------------
 
-    sim_means3D = gaussians.get_xyz[simulatable_gs_mask]
-    sim_scales = gaussians.get_scaling[simulatable_gs_mask]
-    sim_rotations = gaussians.get_rotation[simulatable_gs_mask]
+    sim_means3D = gaussians.get_xyz[simulatable_gs_mask].detach().clone().cpu()
+    sim_scales = gaussians.get_scaling[simulatable_gs_mask].detach().clone().cpu()
+    sim_rotations = gaussians.get_rotation[simulatable_gs_mask].detach().clone().cpu()
 
     transformed_sim_means3D, transformed_sim_covs, pos_center, scaling_modifier = world2grid(sim_means3D, sim_scales, sim_rotations, sim_args, gaussians.covariance_activation)
-    sim_volumes = get_particle_volume(transformed_sim_means3D, sim_args).to(device="cuda")
+    sim_volumes = get_particle_volume(transformed_sim_means3D, sim_args)
 
     mpm_solver = MPM_Simulator(transformed_sim_means3D, transformed_sim_covs, sim_volumes, sim_args)
     mpm_solver.set_boundary_conditions(sim_args.boundary_conditions, sim_args)
@@ -172,19 +173,20 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     # ------------------------------------------ Simulate, Render, and Save ------------------------------------------
 
     # Render initial frame
-    rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, sim_means3D, background, model_args)
+    rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, sim_means3D.cuda(), background, model_args)
     save_frame(rendered_img, save_images_folder, 0, rendered_img_seq)
 
-    for fid in range(1, render_args.num_frames + 1):
+    for fid in tqdm(range(1, render_args.num_frames + 1)):
         # MPM Steps
-        for sub_dt in range(sim_args.steps_per_frame):
+        for ffid in range(sim_args.steps_per_frame):
             mpm_solver.p2g2p(sim_args.substep_dt)
 
-        # sim_means3D = grid2world(mpm_solver.mpm_state.particle_xyz.to_torch(), mpm_solver.mpm_state.particle_cov.to_torch(), scaling_modifier, pos_center, sim_args)
+            sim_means3D = grid2world(mpm_solver.mpm_state.particle_xyz.to_torch().cpu(), mpm_solver.mpm_state.particle_cov.to_torch().cpu(), scaling_modifier, pos_center, sim_args)
         
-        # Render current frame
-        # rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, sim_means3D, background, model_args)
-        # save_frame(rendered_img, save_images_folder, fid, rendered_img_seq)
+            # Render current frame
+            rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, sim_means3D.cuda(), background, model_args)
+            save_frame(rendered_img, save_images_folder, fid * ffid, rendered_img_seq)
+            # print(mpm_solver.mpm_state.particle_xyz.to_torch().min(dim=0)[0], mpm_solver.mpm_state.particle_xyz.to_torch().max(dim=0)[0])
 
     os.system(f"ffmpeg -framerate 25 -i {save_images_folder}/%04d.png -c:v libx264 -s {viewpoint_camera.width}x{viewpoint_camera.height} -y -pix_fmt yuv420p {render_args.output_path}/simulated.mp4")
 

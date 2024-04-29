@@ -26,7 +26,7 @@ class MPM_model:
         if self.material != 0:
             raise TypeError("Material not supported yet")
 
-        self.gravity = ti.Vector([0.0, 0.0, -9.81]) #ti.Vector(self.args.gravity)
+        self.gravity = ti.Vector(self.args.gravity)
 
         # self.grid_v_damping_scale = 1.1
 
@@ -81,7 +81,7 @@ class MPM_state:
 
         self.particle_xyz.from_torch(xyzs)
         self.particle_vel.fill(0.0)
-        self.particle_F.fill(0.0)
+        self.init_identity_mat(self.particle_F)
         self.particle_stress.fill(0.0)
         self.particle_C.fill(0.0)
 
@@ -90,7 +90,7 @@ class MPM_state:
         
         self.particle_R.fill(0.0)
         
-        self.particle_F_trial.fill(0.0)
+        self.init_identity_mat(self.particle_F_trial)
 
         # Grid states
         grid_shape = (args.n_grid, args.n_grid, args.n_grid)
@@ -103,3 +103,8 @@ class MPM_state:
         self.grid_mass.fill(0.0)
         self.grid_v_in.fill(0.0)
         self.grid_v_out.fill(0.0)
+
+    @ti.kernel
+    def init_identity_mat(self, F : ti.template()):
+        for p in range(self.n_particles):
+            F[p] = ti.Matrix.identity(ti.f32, 3)

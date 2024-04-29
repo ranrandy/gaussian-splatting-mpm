@@ -17,55 +17,43 @@ class MPM_Simulator:
 
         self.collider_params = {}
 
-        self.impulse_params = None
-
-        self.preprocess = []
-        self.postprocess = []
+        self.particle_preprocess = []
+        self.grid_postprocess = []
 
     def p2g2p(self, dt: ti.f32):
         self.mpm_state.reset_grid_state()
 
-        for k in range(len(self.preprocess)):
-            if self.preprocess[k][-1](self.time, self.impulse_params):
-                self.preprocess[k][0](dt, self.mpm_state, self.impulse_params)
-        
+        # Particle operations
+        for pp in self.particle_preprocess:
+            if pp.isActive(self.time):
+                pp.apply(self.mpm_state)
         compute_stress_from_F_trial(self.mpm_state, self.mpm_model, dt)
         
         # Particle to Grid
         p2g(self.mpm_state, self.mpm_model, dt)
         
+        # Grid operations
         grid_normalization_and_gravity(self.mpm_state, self.mpm_model, dt)
-
-        for f in range(len(self.postprocess)):
-            self.postprocess[f](self.time, dt, self.mpm_state, self.mpm_model, self.collider_params[f])
+        for gp in self.grid_postprocess:
+            if gp.isActive(self.time):
+                gp.apply(self.mpm_state)
         
         # Grid to Particle
-        # g2p(self.mpm_state, self.mpm_model, dt)
+        g2p(self.mpm_state, self.mpm_model, dt)
         
         self.time += dt
 
-    def set_boundary_conditions(self, bc_args_arr, args : MPMParams):
+    def set_boundary_conditions(self, bc_args_arr, sim_args : MPMParams):
         for bc_args in bc_args_arr:
-            
-            if bc_args["type"] == "cuboid":
-                pass
-            
-            elif bc_args["type"] == "impulse":
-                self.impulse_params = ImpulseParams(
-                    bc_args["start_time"],
-                    bc_args["start_time"] + args.frame_dt * bc_args["num_dt"],
-                    ti.Vector(bc_args["force"])
-                )
-                
-                @ti.kernel
-                def add_impulse(dt: float, state: ti.template(), args : ti.template()):
-                    for p in range(self.n_particles):
-                        state.particle_vel[p] = state.particle_vel[p] + args.force / state.particle_mass[p] * dt
-                
-                def add_impulse_condition(time, args):
-                    return time >= args.start_time and time < args.end_time
+            bc_type = bc_args["type"]
 
-                self.preprocess.append([add_impulse, add_impulse_condition])
+            bc = boundaryConditionTypeCallBacks[bc_type](self.n_particles, bc_args, sim_args)
+            
+            if bc.type in preprocess_bc:
+                self.particle_preprocess.append(bc)
+            
+            if bc.type in postprocess_bc:
+                self.grid_postprocess.append(bc)
 
     # a surface specified by a point and the normal vector
     def add_surface_collider(

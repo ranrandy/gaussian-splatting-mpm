@@ -32,12 +32,20 @@ def compute_stress_from_F_trial(state : ti.template(), model : ti.template(), dt
         #         state.particle_F_trial[p], model, p
         #     )
         # else:
-        #     state.particle_F[p] = state.particle_F_trial[p]
+        state.particle_F[p] = state.particle_F_trial[p]
 
         J = state.particle_F[p].determinant()
         stress = ti.Matrix.zero(ti.f32, 3, 3)
         U, S, V = ti.svd(state.particle_F[p])
 
+        # if p == 0:
+        #     print(state.particle_F[p])
+        #     print(J)
+        #     print(U)
+        #     print(S)
+        #     print(V)
+        #     print(model.material)
+        #     print()
         if model.material == 0:
             stress = kirchoff_stress_FCR(state.particle_F[p], U, V, J, model.mu[p], model.lam[p])
         # elif model.material == 1:
@@ -53,8 +61,12 @@ def compute_stress_from_F_trial(state : ti.template(), model : ti.template(), dt
         #         state.particle_F[p], U, V, sig, model.mu[p], model.lam[p]
         #     )
 
-        # stress = (stress + stress.transpose()) / 2.0 #TODO: We can do an ablation study for this
+        stress = (stress + stress.transpose()) / 2.0 #TODO: We can do an ablation study for this
         state.particle_stress[p] = stress
+
+        # if p == 0:
+        #     print(stress)
+        #     print(state.particle_stress[p])
 
 
 @ti.func # model: MPM_state, w: tm.mat3, dw: tm.mat3, i: ti.int32, j: ti.int32, k: ti.int32
@@ -75,7 +87,8 @@ def p2g(state : ti.template(), model : ti.template(), dt: ti.f32):
         base_pos = (grid_pos - 0.5).cast(int) # Corner of the grid cell, subtracting 0.5 to get to the bottom-left
         fx = grid_pos - base_pos.cast(float)  # Distance from the base pos
 
-        # Equation (121) (123) Quadratic spline kernel in [3]. TODO: (Runfeng) I still don't understand how w and dw is derived
+        # Equation (123) Quadratic spline kernel in [3]. 
+        # Explanation: https://forum.taichi-lang.cn/t/how-the-mls-mpm-quadratic-kernel-implementation-works/1966
         wa, wb, wc = 1.5 - fx, fx - 1.0, fx - 0.5
         w = ti.Matrix([
             [wa[0] * wa[0] * 0.5, 0.75 - wb[0] * wb[0], wc[0] * wc[0] * 0.5],
@@ -100,8 +113,8 @@ def p2g(state : ti.template(), model : ti.template(), dt: ti.f32):
 
             elastic_force = -state.particle_vol[p] * stress @ dweight
             v_in_add = (
-                weight * state.particle_mass[p] * (state.particle_vel[p] + C @ dpos)
-                + dt * elastic_force             # !!
+                weight * state.particle_mass[p] * (state.particle_vel[p] + C @ dpos) # v_i^n
+                + dt * elastic_force
             )
             ti.atomic_add(state.grid_v_in[ix, iy, iz], v_in_add)
             ti.atomic_add(state.grid_mass[ix, iy, iz], weight * state.particle_mass[p])
@@ -217,7 +230,7 @@ def g2p(state: ti.template(), model: ti.template(), dt: ti.f32):
             new_C
         )  # C_p^(n+1) = (1 / (Delta_x^2 * (b + 1))) * sum_i(w_ip^n * v_i^(n+1) * (x_i^n - x_p^n)^T)
         I = ti.Matrix.identity(ti.f32, 3)
-        F_tmp = (I + new_F * dt) * state.particle_F[
+        F_tmp = (I + new_F * dt) @ state.particle_F[
             p
         ]  # F_E_tr_p = (I + nabla_v_p^(n+1)) * F_E_n_p
         state.particle_F_trial[p] = F_tmp  # F_E_n+1_p = Z(F_E_tr_p)
@@ -256,7 +269,8 @@ def compute_mass_from_vol_density(
 @ti.kernel
 def compute_R_from_F(state: ti.template(), model: ti.template()):
     for p in range(model.n_particles):
-        F = state.particle_F_trial[p]
+        # F = state.particle_F_trial[p]
+        F = state.particle_F[p]
         # U = ti.Matrix.zero(ti.f32, 3, 3)
         # V = ti.Matrix.zero(ti.f32, 3, 3)
         # sig = ti.Vector.zero(ti.f32, 3)
@@ -280,7 +294,7 @@ def compute_R_from_F(state: ti.template(), model: ti.template()):
 @ti.kernel
 def compute_cov_from_F(state: ti.template(), model: ti.template()):
     for p in range(model.n_particles):
-        F = state.particle_F_trial[p]
+        F = state.particle_F[p]
 
         init_cov = ti.Matrix(
             [
