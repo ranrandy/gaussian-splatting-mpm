@@ -1,0 +1,1 @@
+Namespace(sh_degree=3, source_path='C:\\Users\\jarbe\\cs2240\\gaussian-splatting-mpm\\gaussian_splatting\\data\\cake', model_path='./output/54266d95-0', images='images', resolution=-1, white_background=False, data_device='cuda', eval=False)

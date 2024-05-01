@@ -1,0 +1,42 @@
+{
+    "model": 
+    {
+        "model_path": "models/cake2",
+        "white_background": true,
+        "loaded_iter": 7000
+    },
+    "mpm": 
+    {
+        "sim_area": [
+            [-1.0, -6.0, -1.0],
+            [0.5, 0.0, 1.0]
+        ],
+        "E": 2e5,
+        "nu": 0.4,
+        "material": "jelly",
+        "density": 100.0,
+        "n_grid": 50,
+        "grid_extent": 2.0,
+        "substep_dt": 1e-4,
+        "frame_dt": 1e-2,
+        "gravity": [0.0, 0.0, 0.0],
+        "rotation_degree": [144.078, -47.8141, 28.95],
+        "boundary_conditions": [
+            {
+                "id": 0,
+                "type": "impulse",
+                "center": [0.3, 0.3, 0.5],
+                "size": [1.4, 0.18, 0.27],
+                "force": [0.0, -1.0, 0.0],
+                "start_time": 0,
+                "num_dt": 20
+            }
+        ]
+    },
+    "render": 
+    {
+        "output_path": "outputs/cake_fracture",
+        "view_cam_idx": 36,
+        "num_frames": 50
+    }
+}

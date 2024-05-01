@@ -64,6 +64,8 @@ class MPMParams(ParamGroup):
         self.substep_dt = 1e-4
         self.frame_dt = 4e-2
 
+        self.rotation_degree = [0.0, 0.0, 0.0]
+
         self.boundary_conditions = []
 
         super().__init__(parser, "MPM Parameters", json_params)

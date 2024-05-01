@@ -21,6 +21,7 @@ import imageio
 from gaussian_splatting.utils.graphics_utils import focal2fov, getProjectionMatrix
 from utils.render_utils import TinyCam, to8b
 from utils.transform_utils import *
+import matplotlib.pyplot as plt # For testing
 
 ti.init(arch=ti.cuda)
 
@@ -130,11 +131,31 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     gaussians = load_model(model_args)
     viewpoint_cams = load_cameras(model_args)
 
+    # theta = torch.tensor(225 * torch.pi / 180)
+
+    # # Initialize a 3x3 identity matrix
+    # R_x = torch.eye(3, dtype=torch.float32).cuda()
+
+    # # Assign cosine and sine values directly
+    # R_x[1, 1] = torch.cos(theta)
+    # R_x[1, 2] = -torch.sin(theta)
+    # R_x[2, 1] = torch.sin(theta)
+    # R_x[2, 2] = torch.cos(theta)
+    # rotated_gaussians = torch.matmul(gaussians.get_xyz, R_x.T)
+
+    degrees = torch.tensor(sim_args.rotation_degree)
+    print("rotations: ", degrees)
+    mats = get_rotation_matrices(degrees)
+    rotated_gaussians = rotate(gaussians.get_xyz, mats)
+
+
     # Simulation settings
     influenced_region_bound = torch.tensor(np.array(sim_args.sim_area)).cuda()
 
-    max_bounded_gs_mask = (gaussians.get_xyz <= influenced_region_bound[1]).all(dim=1)
-    min_bounded_gs_mask = (gaussians.get_xyz >= influenced_region_bound[0]).all(dim=1) 
+    # max_bounded_gs_mask = (gaussians.get_xyz <= influenced_region_bound[1]).all(dim=1)
+    # min_bounded_gs_mask = (gaussians.get_xyz >= influenced_region_bound[0]).all(dim=1) 
+    max_bounded_gs_mask = (rotated_gaussians <= influenced_region_bound[1]).all(dim=1)
+    min_bounded_gs_mask = (rotated_gaussians >= influenced_region_bound[0]).all(dim=1)
     simulatable_gs_mask = torch.logical_and(max_bounded_gs_mask, min_bounded_gs_mask)
     num_sim_gs = torch.sum(simulatable_gs_mask)
 
@@ -156,6 +177,15 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
 
     sim_means3D = gaussians.get_xyz[simulatable_gs_mask].detach()
     sim_covs = gaussians.get_covariance()[simulatable_gs_mask].detach()
+
+    # Apply rotations for pre-processing
+    # rotation = not sim_args.rotation_degree == [0.0, 0.0, 0.0]
+    # if rotation:
+    #     r_mats = get_rotation_matrices(sim_args.rotation_degree)
+    #     rotated_means3D = rotate(sim_means3D, r_mats)
+    #     rotated_covs = rotate_covs(sim_covs, r_mats)
+    #     sim_means3D = rotated_means3D
+    #     sim_covs = rotated_covs
 
     transformed_sim_means3D, pos_center, scaling_modifier = world2grid(sim_means3D, sim_args)
     transformed_sim_covs = sim_covs * (scaling_modifier * scaling_modifier)
