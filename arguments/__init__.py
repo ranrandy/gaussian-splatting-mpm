@@ -81,7 +81,7 @@ class RenderParams(ParamGroup):
         self.output_path = ""
         self.white_background = False
 
-        self.view_cam_idx = 0
+        self.view_cam_idx = 10
         
         self.num_frames = 60
 

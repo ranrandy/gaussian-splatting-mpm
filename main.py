@@ -130,18 +130,31 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     gaussians = load_model(model_args)
     viewpoint_cams = load_cameras(model_args)
 
+    theta = torch.tensor(225 * torch.pi / 180)
+
+    # Initialize a 3x3 identity matrix
+    R_x = torch.eye(3, dtype=torch.float32).cuda()
+
+    # Assign cosine and sine values directly
+    R_x[1, 1] = torch.cos(theta)
+    R_x[1, 2] = -torch.sin(theta)
+    R_x[2, 1] = torch.sin(theta)
+    R_x[2, 2] = torch.cos(theta)
+    rotated_gaussians = torch.matmul(gaussians.get_xyz, R_x.T)
+
+
     # Simulation settings
     influenced_region_bound = torch.tensor(np.array(sim_args.sim_area)).cuda()
 
-    max_bounded_gs_mask = (gaussians.get_xyz <= influenced_region_bound[1]).all(dim=1)
-    min_bounded_gs_mask = (gaussians.get_xyz >= influenced_region_bound[0]).all(dim=1) 
+    max_bounded_gs_mask = (rotated_gaussians <= influenced_region_bound[1]).all(dim=1)
+    min_bounded_gs_mask = (rotated_gaussians >= influenced_region_bound[0]).all(dim=1) 
     simulatable_gs_mask = torch.logical_and(max_bounded_gs_mask, min_bounded_gs_mask)
     num_sim_gs = torch.sum(simulatable_gs_mask)
 
     print(f"Number of simulatable Gaussians: {num_sim_gs}")
 
     # Render settings
-    viewpoint_camera = viewpoint_cams[render_args.view_cam_idx]
+    viewpoint_camera = viewpoint_cams[0]
     viewpoint_camera.toCuda()
 
     bg_color = [1, 1, 1] if render_args.white_background else [0, 0, 0]
