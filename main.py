@@ -165,6 +165,14 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     mpm_solver = MPM_Simulator(transformed_sim_means3D, transformed_sim_covs, sim_volumes, sim_args)
     mpm_solver.set_boundary_conditions(sim_args.boundary_conditions, sim_args)
 
+    mpm_solver.add_surface_collider((0.0, 0.0, 0.5), (0.0, 0.0, 1.0))
+    mpm_solver.add_surface_collider((0.0, 0.5, 0.0), (0.0, 1.0, 0.0))
+    mpm_solver.add_surface_collider((0.5, 0.0, 0.0), (1.0, 0.0, 0.0))
+    mpm_solver.add_surface_collider((1.5, 0.0, 0.0), (-1.0, 0.0, 0.0))
+    mpm_solver.add_surface_collider((0.0, 1.5, 0.0), (0.0, -1.0, 0.0))
+    mpm_solver.add_surface_collider((0.0, 0.0, 1.5), (0.0, 0.0, -1.0))
+
+
     # # Test for adding a surface collider
     # point = [0.0, 0.0, -0.8]
     # normal = [0.0, 0.0, 1.0]

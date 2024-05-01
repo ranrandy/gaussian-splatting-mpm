@@ -13,7 +13,7 @@
         ],
         "E": 2000,
         "nu": 0.2,
-        "material": "metal",
+        "material": "jelly",
         "density": 200.0,
         "n_grid": 100,
         "grid_extent": 2.0

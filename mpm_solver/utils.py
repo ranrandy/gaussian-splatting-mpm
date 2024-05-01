@@ -1,6 +1,7 @@
 from numpy import dtype
 import taichi as ti
 from mpm_solver.constitutive_models import *
+import taichi.math as tm
 
 material_types = {
     "jelly": 0,
@@ -251,7 +252,8 @@ def compute_mu_lam_from_E_nu(
     lam: ti.template(),
 ):
     for p in range(n_particles):
-        mu[p] = E[p] / (2.0 * (1.0 + nu[p]))
+        # mu[p] = E[p] / (2.0 * (1.0 + nu[p]))
+        mu[p] = 0.0
         lam[p] = E[p] * nu[p] / ((1.0 + nu[p]) * (1.0 - 2.0 * nu[p]))
 
 

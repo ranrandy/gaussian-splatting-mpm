@@ -18,6 +18,8 @@ class BasicBC:
         self.center = bc_args["center"]
         self.size = bc_args["size"]
 
+        self.isCollide = False
+
     @ti.kernel
     def apply(self, state : ti.template(), dx : float):
         for grid_xyz in ti.grouped(state.grid_v_out):
