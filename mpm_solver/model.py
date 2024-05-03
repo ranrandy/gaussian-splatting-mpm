@@ -50,6 +50,10 @@ class MPM_model:
         # self.yield_stress = ti.field(dtype=ti.f32, shape=n_particles)
         pass
 
+    def modify_elasiticity_params(self):
+
+        compute_mu_lam_from_E_nu(self.n_particles, self.E, self.nu, self.mu, self.lam)       
+
 
 @ti.data_oriented
 class MPM_state:

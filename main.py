@@ -18,11 +18,12 @@ from gaussian_splatting.utils.system_utils import searchForMaxIteration
 
 from tqdm import tqdm
 import imageio
-from gaussian_splatting.utils.graphics_utils import focal2fov, getProjectionMatrix
+from gaussian_splatting.utils.graphics_utils import focal2fov, getProjectionMatrix, getWorld2View2
 from utils.render_utils import TinyCam, to8b
 from utils.transform_utils import *
 
 ti.init(arch=ti.cuda)
+
 
 
 def load_model(args):
@@ -75,8 +76,31 @@ def load_cameras(args):
                                         full_proj_mat=full_proj_mat))
     return cameras
 
+def modify_cam(viewpoint_camera : TinyCam, center_view_world_space, observant_coordinates):
+    position, R = get_camera_position_and_rotation(
+                    230,
+                    15,
+                    5.75,
+                    center_view_world_space,
+                    observant_coordinates,
+                )
+    tmp = np.zeros((4, 4))
+    tmp[:3, :3] = R.tolist()
+    tmp[:3, 3] = position.tolist()
+    tmp[3, 3] = 1
+    C2W = np.linalg.inv(tmp)
+    R = C2W[:3, :3].transpose()
+    T = C2W[:3, 3]
 
-def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, sim_means3D, sim_covs, bg_color, args, scaling_modifier = 1.0):
+    proj_mat = getProjectionMatrix(znear=0.01, zfar=100, fovX=viewpoint_camera.FovX, fovY=viewpoint_camera.FovY).transpose(0, 1).cuda()
+    viewpoint_camera.view_mat = torch.tensor(getWorld2View2(R, T, np.array([0.0, 0.0, 0.0]), 1.0)).transpose(0, 1).cuda()
+    viewpoint_camera.view_mat = viewpoint_camera.view_mat.to(torch.float32)
+    viewpoint_camera.cam_center = T.astype(np.float32)
+    viewpoint_camera.full_proj_mat = (viewpoint_camera.view_mat.unsqueeze(0).bmm(proj_mat.unsqueeze(0))).squeeze(0)
+    viewpoint_camera.full_proj_mat = viewpoint_camera.full_proj_mat.to(torch.float32)
+    return viewpoint_camera
+
+def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, sim_means3D, sim_covs, bg_color, args, rotation_matrices, pos_center, scaling_modifier = 1.0):
     '''
         Rasterize the Gaussian cloud
     '''
@@ -106,6 +130,15 @@ def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, si
     shs = torch.cat([pc.get_features[~sim_gs_mask], pc.get_features[sim_gs_mask]], dim=0)
     covs = torch.cat([pc.get_covariance()[~sim_gs_mask], sim_covs], dim=0)
 
+    means3D = apply_inverse_rotations(
+        undotransform2origin(
+            undoshift2center111(means3D), scaling_modifier, pos_center
+        ),
+        rotation_matrices,
+    )
+    covs = covs / (scaling_modifier * scaling_modifier)
+    covs = apply_inverse_cov_rotations(covs, rotation_matrices)
+
     rendered_image, _ = rasterizer(
         means3D = means3D,
         means2D = None,
@@ -130,18 +163,8 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     gaussians = load_model(model_args)
     viewpoint_cams = load_cameras(model_args)
 
-    theta = torch.tensor(225 * torch.pi / 180)
-
-    # Initialize a 3x3 identity matrix
-    R_x = torch.eye(3, dtype=torch.float32).cuda()
-
-    # Assign cosine and sine values directly
-    R_x[1, 1] = torch.cos(theta)
-    R_x[1, 2] = -torch.sin(theta)
-    R_x[2, 1] = torch.sin(theta)
-    R_x[2, 2] = torch.cos(theta)
-    rotated_gaussians = torch.matmul(gaussians.get_xyz, R_x.T)
-
+    rotation_matrices = generate_rotation_matrices([torch.tensor(240.0)], [torch.tensor(0.0)])
+    rotated_gaussians = apply_rotations(gaussians.get_xyz, rotation_matrices)
 
     # Simulation settings
     influenced_region_bound = torch.tensor(np.array(sim_args.sim_area)).cuda()
@@ -153,10 +176,6 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
 
     print(f"Number of simulatable Gaussians: {num_sim_gs}")
 
-    # Render settings
-    viewpoint_camera = viewpoint_cams[0]
-    viewpoint_camera.toCuda()
-
     bg_color = [1, 1, 1] if render_args.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
     
@@ -167,23 +186,52 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
 
     # ------------------------------------------ Initialization ------------------------------------------
 
-    sim_means3D = gaussians.get_xyz[simulatable_gs_mask].detach()
+    sim_means3D = rotated_gaussians[simulatable_gs_mask].detach()
     sim_covs = gaussians.get_covariance()[simulatable_gs_mask].detach()
+    
+    sim_covs = apply_cov_rotations(sim_covs, rotation_matrices)
 
     transformed_sim_means3D, pos_center, scaling_modifier = world2grid(sim_means3D, sim_args)
     transformed_sim_covs = sim_covs * (scaling_modifier * scaling_modifier)
+
+    mpm_space_viewpoint_center = (
+        torch.tensor([1, 0.89, 0.81]).reshape((1, 3)).cuda()
+    )
+    mpm_space_vertical_upward_axis = (
+        torch.tensor([0, 0, 1])
+        .reshape((1, 3))
+        .cuda()
+    )    
+    (
+        viewpoint_center_worldspace,
+        observant_coordinates,
+    ) = get_center_view_worldspace_and_observant_coordinate(
+        mpm_space_viewpoint_center,
+        mpm_space_vertical_upward_axis,
+        rotation_matrices,
+        scaling_modifier,
+        pos_center,
+    )
+    print(viewpoint_center_worldspace)
+    print(observant_coordinates)
+
+    # Render settings
+    viewpoint_camera = viewpoint_cams[0]
+    viewpoint_camera = modify_cam(viewpoint_camera, viewpoint_center_worldspace, observant_coordinates)
+    viewpoint_camera.toCuda()
     
     sim_volumes = get_particle_volume(transformed_sim_means3D, sim_args)
 
     mpm_solver = MPM_Simulator(transformed_sim_means3D, transformed_sim_covs, sim_volumes, sim_args)
     mpm_solver.set_boundary_conditions(sim_args.boundary_conditions, sim_args)
 
-    mpm_solver.add_surface_collider((0.0, 0.0, 0.5), (0.0, 0.0, 1.0))
-    mpm_solver.add_surface_collider((0.0, 0.5, 0.0), (0.0, 1.0, 0.0))
-    mpm_solver.add_surface_collider((0.5, 0.0, 0.0), (1.0, 0.0, 0.0))
-    mpm_solver.add_surface_collider((1.5, 0.0, 0.0), (-1.0, 0.0, 0.0))
-    mpm_solver.add_surface_collider((0.0, 1.5, 0.0), (0.0, -1.0, 0.0))
-    mpm_solver.add_surface_collider((0.0, 0.0, 1.5), (0.0, 0.0, -1.0))
+
+    mpm_solver.add_surface_collider((0.0, 0.0, 0.8), (0.0, 0.0, 1.0))
+    mpm_solver.add_surface_collider((0.0, 0.4, 0.0,), (0.0, 1.0, 0.0))
+    mpm_solver.add_surface_collider((0.4, 0.0, 0.0), (1.0, 0.0, 0.0))
+    mpm_solver.add_surface_collider((1.6, 0.0, 0.0), (-1.0, 0.0, 0.0))
+    mpm_solver.add_surface_collider((0.0, 1.6, 0.0), (0.0, -1.0, 0.0))
+    mpm_solver.add_surface_collider((0.0, 0.0, 1.6), (0.0, 0.0, -1.0))
 
 
     # # Test for adding a surface collider
@@ -194,7 +242,7 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     # ------------------------------------------ Simulate, Render, and Save ------------------------------------------
 
     # Render initial frame
-    rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, sim_means3D, sim_covs, background, model_args)
+    rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, sim_means3D, sim_covs, background, model_args, rotation_matrices, pos_center)
     save_frame(rendered_img, save_images_folder, 0, rendered_img_seq)
 
     for fid in tqdm(range(1, render_args.num_frames + 1)):
@@ -210,7 +258,7 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
             scaling_modifier, pos_center, sim_args)
         
         # Render current frame
-        rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, sim_means3D, sim_covs, background, model_args)
+        rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, sim_means3D, sim_covs, background, model_args, rotation_matrices, pos_center)
         save_frame(rendered_img, save_images_folder, fid, rendered_img_seq)
 
     os.system(f"ffmpeg -framerate 25 -i {save_images_folder}/%04d.png -c:v libx264 -s {viewpoint_camera.width}x{viewpoint_camera.height} -y -pix_fmt yuv420p {render_args.output_path}/simulated.mp4")

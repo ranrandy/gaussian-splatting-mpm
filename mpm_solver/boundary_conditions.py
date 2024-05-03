@@ -44,6 +44,21 @@ class ImpulseBC(BasicBC):
             if all(ti.abs(state.particle_xyz[p] - self.center) < self.size): #TODO: Need to replace this with a mask
                 state.particle_vel[p] = state.particle_vel[p] + self.force / state.particle_mass[p] * self.substep_dt
 
+@ti.data_oriented
+class MaterialParamsModifier(BasicBC):
+    def __init__(self, n_particles, bc_args, sim_args):
+        self.mu = bc_args["mu"]
+        # self.density = bc_args["density"]
+
+        super().__init__(n_particles, bc_args, sim_args)
+
+    @ti.kernel
+    def apply(self, state : ti.template(), model : ti.template()):
+        for p in range(self.n_particles):
+            if all(ti.abs(state.particle_xyz[p] - self.center) < self.size): #TODO: Need to replace this with a mask
+                model.mu[p] = self.mu
+                
+
 
 preprocess_bc = (
     "impulse"
@@ -53,7 +68,12 @@ postprocess_bc = (
     "fixed_cube"
 )
 
+init_bc = (
+    "additional_params"
+)
+
 boundaryConditionTypeCallBacks = {
     "fixed_cube": BasicBC,
-    "impulse" : ImpulseBC
+    "impulse" : ImpulseBC,
+    "additional_params" : MaterialParamsModifier
 }

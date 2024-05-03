@@ -19,6 +19,7 @@ class MPM_Simulator:
 
         self.particle_preprocess = []
         self.grid_postprocess = []
+        self.init_particles = []
 
     def p2g2p(self, dt: ti.f32):
         self.mpm_state.reset_grid_state()
@@ -57,6 +58,12 @@ class MPM_Simulator:
             
             if bc.type in postprocess_bc:
                 self.grid_postprocess.append(bc)
+            
+            if bc.type in init_bc:
+                self.init_particles.append(bc)
+
+        for pp in self.init_particles:
+            pp.apply(self.mpm_state, self.mpm_model)
 
     def postprocess(self):
         compute_cov_from_F(self.mpm_state, self.mpm_model)
