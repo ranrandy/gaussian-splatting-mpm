@@ -1,0 +1,1 @@
+Namespace(data_device='cuda', eval=False, images='images', model_path='./output/1663e6db-4', resolution=-1, sh_degree=3, source_path='/home/fastblob/Documents/datasets/water_armadilo', white_background=False)

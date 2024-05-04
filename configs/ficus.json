@@ -1,0 +1,30 @@
+{
+    "model": 
+    {
+        "model_path": "models/ficus",
+        "white_background": false,
+        "loaded_iter": 30000
+    },
+    "mpm": 
+    {
+        "sim_area": [
+            [-1.2, -1, -1.2],
+            [ 1.2,  1.9, 1.2]
+        ],
+        "E": 2000,
+        "nu": 0.2,
+        "material": "sand",
+        "density": 200.0,
+        "n_grid": 100,
+        "grid_extent": 2.0,
+        "substep_dt": 1e-4,
+        "frame_dt": 4e-2,
+        "gravity": [0.0, 0.0, -6.0]
+    },
+    "render": 
+    {
+        "output_path": "outputs/ficus",
+        "view_cam_idx": 8,
+        "num_frames": 30
+    }
+}

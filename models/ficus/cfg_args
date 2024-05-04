@@ -1,0 +1,1 @@
+Namespace(sh_degree=3, source_path='/home/yuxing/Development/PIGGY/retrain_nerf/ficus', model_path='./output/b3ee3698-9', images='images', resolution=-1, white_background=True, data_device='cuda', eval=False)

@@ -1,1 +1,0 @@
-Namespace(crop_raw=False, data_device='cuda', eval=False, hdr=False, images='images', model_path='output/mpm/mic', raw_images='raw', resolution=-1, sh_degree=3, source_path='C:\\Users\\Runfeng Li\\Desktop\\_\\gaussian-splatting-hdr\\datasets\\nerf_synthetic\\mic', white_background=False)

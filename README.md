@@ -19,7 +19,7 @@ Some example Gaussian models are in the  `models` folder. You can train more exa
 ## Usage
 To run the current version of this code, modify the below command
 ```
-python main.py -m models/mic --save_path output/mic --view_cam_idx 10 --num_frames 60 --loaded_iter 7000 -w 
+python main.py --config_path configs/ficus.json --output_path output/ficus_sand_gravity
 ```
 
 ## Method
