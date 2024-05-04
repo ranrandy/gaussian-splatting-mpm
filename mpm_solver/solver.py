@@ -57,7 +57,6 @@ class MPM_Simulator:
 
     def postprocess(self):
         compute_cov_from_F(self.mpm_state, self.mpm_model)
-        compute_R_from_F(self.mpm_state, self.mpm_model)
 
     # a surface specified by a point and the normal vector
     def add_surface_collider(

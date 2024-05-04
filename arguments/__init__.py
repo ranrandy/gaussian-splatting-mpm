@@ -85,4 +85,7 @@ class RenderParams(ParamGroup):
         
         self.num_frames = 60
 
+        self.save_pcd = False
+        self.save_pcd_interval = 10
+
         super().__init__(parser, "Render Parameters", json_params)

@@ -70,8 +70,6 @@ class MPM_state:
         self.particle_init_cov = ti.field(dtype=ti.f32, shape=n_particles * 6)          # Sec 3.4. A_p
         self.particle_cov = ti.field(dtype=ti.f32, shape=n_particles * 6)               # Sec 3.4. a_p(t)
 
-        self.particle_R = ti.Matrix.field(3, 3, dtype=ti.f32, shape=n_particles)        # Rotation of spherical harmonic basis (Sec 3.5)
-
         self.particle_F_trial = ti.Matrix.field(3, 3, dtype=ti.f32, shape=n_particles)  # Used for plasticity models
         
         # Particle state initializations
@@ -87,9 +85,7 @@ class MPM_state:
 
         self.particle_init_cov.from_torch(covs.flatten())
         self.particle_cov.copy_from(self.particle_init_cov)
-        
-        self.particle_R.fill(0.0)
-        
+                
         self.init_identity_mat(self.particle_F_trial)
 
         # Grid states

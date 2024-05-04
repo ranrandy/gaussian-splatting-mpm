@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 import json
 from argparse import ArgumentParser
@@ -21,6 +22,7 @@ import imageio
 from gaussian_splatting.utils.graphics_utils import focal2fov, getProjectionMatrix
 from utils.render_utils import TinyCam, to8b
 from utils.transform_utils import *
+import copy
 
 ti.init(arch=ti.cuda)
 
@@ -149,7 +151,7 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     
     save_images_folder = os.path.join(render_args.output_path, "images")
     os.makedirs(save_images_folder, exist_ok=True)
-    
+
     rendered_img_seq = []
 
     # ------------------------------------------ Initialization ------------------------------------------
@@ -188,10 +190,22 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
             mpm_solver.mpm_state.particle_cov.to_torch().cuda(), 
             scaling_modifier, pos_center, sim_args)
         
+        if render_args.save_pcd and fid % render_args.save_pcd_interval == 0:
+            gaussians_ = copy.deepcopy(gaussians)
+            gaussians_._xyz.requires_grad_(False)
+            gaussians_._xyz[simulatable_gs_mask] = sim_means3D
+            ply_path = os.path.join(render_args.output_path, "point_cloud", f"iteration_{fid}", "point_cloud.ply")
+            gaussians_.save_ply(ply_path)
+        
         # Render current frame
         rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, sim_means3D, sim_covs, background, model_args)
         save_frame(rendered_img, save_images_folder, fid, rendered_img_seq)
 
+    if render_args.save_pcd:
+        shutil.copy(os.path.join(model_args.model_path, "cameras.json"), os.path.join(render_args.output_path, "cameras.json"))
+        shutil.copy(os.path.join(model_args.model_path, "cfg_args"), os.path.join(render_args.output_path, "cfg_args"))
+        shutil.copy(os.path.join(model_args.model_path, "input.ply"), os.path.join(render_args.output_path, "input.ply"))
+    
     os.system(f"ffmpeg -framerate 25 -i {save_images_folder}/%04d.png -c:v libx264 -s {viewpoint_camera.width}x{viewpoint_camera.height} -y -pix_fmt yuv420p {render_args.output_path}/simulated.mp4")
 
     print("Done.")

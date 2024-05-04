@@ -19,9 +19,12 @@ Some example 3D Gaussian models are in the  `models` folder. You can train more 
 ## Usage
 To run the current version of this code, modify the below command
 ```
-python main.py --config_path configs/chair.json --output_path output/chair_gravity 
+python main.py --config_path configs/lego.json --output_path outputs/lego_debug 
 ```
-*remark: cmd arguments have higher priority than config arguments. So, to set a new value for an argument, you can simply add that to the cmd.
+To save the intermediate gaussian cloud and visualize the ellipsoids, 
+```
+python main.py --config_path configs/lego.json --output_path outputs/lego_debug --save_pcd --save_pcd_interval 10
+```
 
 ## Results
 

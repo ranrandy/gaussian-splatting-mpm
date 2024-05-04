@@ -1,5 +1,5 @@
-from numpy import dtype
 import taichi as ti
+import taichi.math as tm
 from mpm_solver.constitutive_models import *
 
 material_types = {
@@ -264,31 +264,6 @@ def compute_mass_from_vol_density(
 ):
     for i in range(n_particles):
         mass[i] = density[i] * vol[i]
-
-
-@ti.kernel
-def compute_R_from_F(state: ti.template(), model: ti.template()):
-    for p in range(model.n_particles):
-        # F = state.particle_F_trial[p]
-        F = state.particle_F_trial[p]
-        # U = ti.Matrix.zero(ti.f32, 3, 3)
-        # V = ti.Matrix.zero(ti.f32, 3, 3)
-        # sig = ti.Vector.zero(ti.f32, 3)
-        # wp.svd3(F, U, sig, V)
-        U, sig, V = ti.svd(F)
-
-        if U.determinant() < 0:
-            U[0, 2] = -U[0, 2]
-            U[1, 2] = -U[1, 2]
-            U[2, 2] = -U[2, 2]
-
-        if V.determinant() < 0:
-            V[0, 2] = -V[0, 2]
-            V[1, 2] = -V[1, 2]
-            V[2, 2] = -V[2, 2]
-
-        R = U @ V.transpose()
-        state.particle_R[p] = R.transpose()
 
 
 @ti.kernel
