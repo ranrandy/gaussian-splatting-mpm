@@ -8,20 +8,92 @@
     "mpm": 
     {
         "sim_area": [
-            [-0.3, -0.3, -0.5],
-            [ 0.3,  0.3,  0.5]
+            [-0.7, -0.7, -1.3],
+            [ 0.7,  0.7,  1.3]
         ],
-        "E": 2000,
-        "nu": 0.2,
+        "E": 2e5,
+        "nu": 0.4,
         "material": "jelly",
-        "density": 200.0,
+        "density": 100.0,
         "n_grid": 100,
-        "grid_extent": 2.0
+        "grid_extent": 2.0,
+        "substep_dt": 1e-4,
+        "frame_dt": 1e-2,
+        "gravity": [0.0, 0.0, -4.0],
+        "boundary_conditions": [
+            {
+                "id": 0,
+                "type": "fixed_cube",
+                "center": [2.0, 1.0, 1.0],
+                "size": [0.3, 2.0, 2.0],
+                "start_time": 0,
+                "num_dt": 10000000000000
+            },
+            {
+                "id": 1,
+                "type": "impulse",
+                "center": [1.0, 0.88, 1.5],
+                "size": [0.1, 0.1, 0.2],
+                "force": [0.0, 0.0, -0.04],
+                "start_time": 0,
+                "num_dt": 3
+            },
+            {
+                "id": 3,
+                "type": "fixed_cube",
+                "center": [0.0, 1.0, 1.0],
+                "size": [0.3, 2.0, 2.0],
+                "start_time": 0,
+                "num_dt": 100000000000000000
+            },
+            {
+                "id": 4,
+                "type": "fixed_cube",
+                "center": [1.0, 2.0, 1.0],
+                "size": [2.0, 0.3, 2.0],
+                "start_time": 0,
+                "num_dt": 100000000000000000000
+            },
+            {
+                "id": 5,
+                "type": "fixed_cube",
+                "center": [1.0, 0.0, 1.0],
+                "size": [2.0, 0.3, 2.0],
+                "start_time": 0,
+                "num_dt": 100000000000000000000000
+            },
+            {
+                "id": 6,
+                "type": "fixed_cube",
+                "center": [1.0, 1.0, 2.0],
+                "size": [2.0, 2.0, 0.3],
+                "start_time": 0,
+                "num_dt": 100000000000000
+            },
+            {
+                "id": 7,
+                "type": "fixed_cube",
+                "center": [1.0, 1.0, 0.0],
+                "size": [2.0, 2.0, 0.5],
+                "start_time": 0,
+                "num_dt": 1
+            },
+            {
+                "id": 8,
+                "type": "additional_params",
+                "center": [1.0, 0.88, 1.6],
+                "size": [0.2, 0.2, 0.4],
+                "start_time": 0,
+                "num_dt": 100000000000000,
+                "mu" : 0.0,
+                "density": 20
+            }
+        ]
     },
     "render": 
     {
         "output_path": "outputs/chair",
         "view_cam_idx": 2,
-        "num_frames": 60
+        "num_frames": 100
     }
 }

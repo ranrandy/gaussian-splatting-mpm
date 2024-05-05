@@ -48,7 +48,8 @@ class ImpulseBC(BasicBC):
 class MaterialParamsModifier(BasicBC):
     def __init__(self, n_particles, bc_args, sim_args):
         self.mu = bc_args["mu"]
-        # self.density = bc_args["density"]
+        self.density = bc_args["density"]
+
 
         super().__init__(n_particles, bc_args, sim_args)
 
@@ -57,6 +58,8 @@ class MaterialParamsModifier(BasicBC):
         for p in range(self.n_particles):
             if all(ti.abs(state.particle_xyz[p] - self.center) < self.size): #TODO: Need to replace this with a mask
                 model.mu[p] = self.mu
+                state.particle_density[p] = self.density
+
                 
 
 

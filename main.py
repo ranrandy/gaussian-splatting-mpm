@@ -39,7 +39,7 @@ def load_model(args):
         loaded_iter = args.loaded_iter
     print("Loading trained model at iteration {}".format(loaded_iter))
 
-    gaussians.load_ply(os.path.join(args.model_path, "point_cloud", "iteration_" + str(loaded_iter), "point_cloud.ply"))
+    gaussians.load_multiple_plys([os.path.join(args.model_path, "point_cloud", "iteration_" + str(loaded_iter), "point_cloud.ply"), os.path.join(args.model_path, "point_cloud", "iteration_" + str(loaded_iter), "point_cloud2.ply")])
     return gaussians
 
 def load_cameras(args):
@@ -78,8 +78,8 @@ def load_cameras(args):
 
 def modify_cam(viewpoint_camera : TinyCam, center_view_world_space, observant_coordinates):
     position, R = get_camera_position_and_rotation(
-                    230,
-                    15,
+                    130,
+                    0,
                     5.75,
                     center_view_world_space,
                     observant_coordinates,
@@ -125,10 +125,15 @@ def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, si
     rasterizer = GaussianRasterizer(raster_settings=raster_settings)
 
     # Rasterize visible Gaussians to image, obtain their radii (on screen). 
-    means3D = torch.cat([pc.get_xyz[~sim_gs_mask], sim_means3D], dim=0)
-    opacities = torch.cat([pc.get_opacity[~sim_gs_mask], pc.get_opacity[sim_gs_mask]], dim=0)
-    shs = torch.cat([pc.get_features[~sim_gs_mask], pc.get_features[sim_gs_mask]], dim=0)
-    covs = torch.cat([pc.get_covariance()[~sim_gs_mask], sim_covs], dim=0)
+    # means3D = torch.cat([pc.get_xyz[~sim_gs_mask], sim_means3D], dim=0)
+    # opacities = torch.cat([pc.get_opacity[~sim_gs_mask], pc.get_opacity[sim_gs_mask]], dim=0)
+    # shs = torch.cat([pc.get_features[~sim_gs_mask], pc.get_features[sim_gs_mask]], dim=0)
+    # covs = torch.cat([pc.get_covariance()[~sim_gs_mask], sim_covs], dim=0)
+
+    means3D = sim_means3D
+    opacities = pc.get_opacity[sim_gs_mask]
+    shs = pc.get_features[sim_gs_mask]
+    covs = sim_covs
 
     means3D = apply_inverse_rotations(
         undotransform2origin(
@@ -163,7 +168,10 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     gaussians = load_model(model_args)
     viewpoint_cams = load_cameras(model_args)
 
-    rotation_matrices = generate_rotation_matrices([torch.tensor(240.0)], [torch.tensor(0.0)])
+    # gaussians.drop_low_opacity(0.02)
+    # gaussians.drop_empty_gaussians(sim_args.mask)
+
+    rotation_matrices = generate_rotation_matrices([torch.tensor(0.0)], [torch.tensor(0.0)])
     rotated_gaussians = apply_rotations(gaussians.get_xyz, rotation_matrices)
 
     # Simulation settings
@@ -174,6 +182,17 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     simulatable_gs_mask = torch.logical_and(max_bounded_gs_mask, min_bounded_gs_mask)
     num_sim_gs = torch.sum(simulatable_gs_mask)
 
+    # simulatable_gs_mask = torch.zeros(rotated_gaussians.shape[0], dtype=torch.bool).cuda()
+
+    # for bounds in sim_args.sim_area:
+    #     bounds = torch.tensor(np.array(bounds)).cuda()
+    #     max_bounded_gs_mask = (rotated_gaussians <= bounds[1]).all(dim=1)
+    #     min_bounded_gs_mask = (rotated_gaussians >= bounds[0]).all(dim=1)
+    #     # Update the simulatable mask to include any Gaussians within current bounds
+    #     simulatable_gs_mask |= torch.logical_and(max_bounded_gs_mask, min_bounded_gs_mask)
+
+    # num_sim_gs = torch.sum(simulatable_gs_mask)
+
     print(f"Number of simulatable Gaussians: {num_sim_gs}")
 
     bg_color = [1, 1, 1] if render_args.white_background else [0, 0, 0]
@@ -183,6 +202,8 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     os.makedirs(save_images_folder, exist_ok=True)
     
     rendered_img_seq = []
+
+    particle_position_tensor_to_ply(rotated_gaussians, "/home/fastblob/Documents/PhysGaussians/gaussian-splatting-mpm/output_ply/rotated_particles.ply")
 
     # ------------------------------------------ Initialization ------------------------------------------
 
@@ -195,7 +216,7 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     transformed_sim_covs = sim_covs * (scaling_modifier * scaling_modifier)
 
     mpm_space_viewpoint_center = (
-        torch.tensor([1, 0.89, 0.81]).reshape((1, 3)).cuda()
+        torch.tensor([0.5, 0.5, 0.5]).reshape((1, 3)).cuda()
     )
     mpm_space_vertical_upward_axis = (
         torch.tensor([0, 0, 1])
@@ -226,12 +247,12 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     mpm_solver.set_boundary_conditions(sim_args.boundary_conditions, sim_args)
 
 
-    mpm_solver.add_surface_collider((0.0, 0.0, 0.8), (0.0, 0.0, 1.0))
-    mpm_solver.add_surface_collider((0.0, 0.4, 0.0,), (0.0, 1.0, 0.0))
-    mpm_solver.add_surface_collider((0.4, 0.0, 0.0), (1.0, 0.0, 0.0))
-    mpm_solver.add_surface_collider((1.6, 0.0, 0.0), (-1.0, 0.0, 0.0))
-    mpm_solver.add_surface_collider((0.0, 1.6, 0.0), (0.0, -1.0, 0.0))
-    mpm_solver.add_surface_collider((0.0, 0.0, 1.6), (0.0, 0.0, -1.0))
+    mpm_solver.add_surface_collider((0.0, 0.0, 0.4), (0.0, 0.0, 1.0))
+    # mpm_solver.add_surface_collider((0.0, 0.5, 0.0,), (0.0, 1.0, 0.0))
+    # mpm_solver.add_surface_collider((0.5, 0.0, 0.0), (1.0, 0.0, 0.0))
+    # mpm_solver.add_surface_collider((2.0, 0.0, 0.0), (-1.0, 0.0, 0.0))
+    # mpm_solver.add_surface_collider((0.0, 2.0, 0.0), (0.0, -1.0, 0.0))
+    # mpm_solver.add_surface_collider((0.0, 0.0, 2.0), (0.0, 0.0, -1.0))
 
 
     # # Test for adding a surface collider

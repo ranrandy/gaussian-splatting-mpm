@@ -50,6 +50,7 @@ class MPMParams(ParamGroup):
             [-1.0, -1.0, -1.0],
             [ 1.0,  1.0,  1.0]
         ]
+        self.mask = []
         
         self.E = 2e6
         self.nu = 0.4
