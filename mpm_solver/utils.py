@@ -16,54 +16,52 @@ material_types = {
 @ti.kernel  ##### TODO: calculate the deformation gradients.
 def compute_stress_from_F_trial(state : ti.template(), model : ti.template(), dt: ti.f32):
     for p in range(model.n_particles):
-        # if model.material == 1:  # metal ??
-        #     state.particle_F[p] = von_mises_return_mapping(
-        #         state.particle_F_trial[p], model, p
-        #     )
-        # elif model.material == 2:  # sand  ??
-        #     state.particle_F[p] = sand_return_mapping(
-        #         state.particle_F_trial[p], state, model, p
-        #     )
-        # elif model.material == 3:  # visplas, with StVk + VM, no thickening ??
-        #     state.particle_F[p] = viscoplasticity_return_mapping_with_StVK(
-        #         state.particle_F_trial[p], model, p, dt
-        #     )
-        # elif model.material == 5:
-        #     state.particle_F[p] = von_mises_return_mapping_with_damage(
-        #         state.particle_F_trial[p], model, p
-        #     )
-        # else:
-        state.particle_F[p] = state.particle_F_trial[p]
+
+        if model.material[p] == 1:    # metal
+            state.particle_F[p] = von_mises_return_mapping(
+                state.particle_F_trial[p], model, p
+            )
+        elif model.material[p] == 2:  # sand
+            state.particle_F[p] = sand_return_mapping(
+                state.particle_F_trial[p], state, model, p
+            )
+        elif model.material == 3:     # visplas, with StVk + VM, no thickening ??
+            state.particle_F[p] = viscoplasticity_return_mapping_with_StVK(
+                state.particle_F_trial[p], model, p, dt
+            )
+        elif model.material == 5:     # plasticine
+            state.particle_F[p] = von_mises_return_mapping_with_damage(
+                state.particle_F_trial[p], model, p
+            )
+        else:
+            state.particle_F[p] = state.particle_F_trial[p]
 
         J = state.particle_F[p].determinant()
         stress = ti.Matrix.zero(ti.f32, 3, 3)
         U, S, V = ti.svd(state.particle_F[p])
 
-        # if p == 0:
-        #     print(state.particle_F[p])
-        #     print(J)
-        #     print(U)
-        #     print(S)
-        #     print(V)
-        #     print(model.material)
-        #     print()
-        if model.material == 0:
+        pressure = 0.0
+
+        if model.material[p] == 0 or model.material[p] == 5:   
             stress = kirchoff_stress_FCR(state.particle_F[p], U, V, J, model.mu[p], model.lam[p])
-        # elif model.material == 1:
-        #     stress = kirchoff_stress_StVK(
-        #         state.particle_F[p], U, V, sig, model.mu[p], model.lam[p]
-        #     )
-        # elif model.material == 2:
-        #     stress = kirchoff_stress_Drucker_Prager(
-        #         state.particle_F[p], U, V, sig, model.mu[p], model.lam[p]
-        #     )
-        # elif model.material == 3:
-        #     stress = kirchoff_stress_StVK(
-        #         state.particle_F[p], U, V, sig, model.mu[p], model.lam[p]
-        #     )
+        elif model.material[p] == 1:
+            stress = kirchoff_stress_StVK(
+                state.particle_F[p], U, V, S, model.mu[p], model.lam[p]
+            )
+        elif model.material[p] == 2: # sand
+            stress = kirchoff_stress_Drucker_Prager(
+                state.particle_F[p], U, V, S, model.mu[p], model.lam[p]
+            )
+        elif model.material == 3:
+            stress = kirchoff_stress_StVK(
+                state.particle_F[p], U, V, S, model.mu[p], model.lam[p]
+            )
+        elif model.material == 6:
+            pressure = fluid_pressure(state.particle_density[p], model.gamma[p], model.rho0[p], model.bulk[p])
 
         stress = (stress + stress.transpose()) / 2.0 #TODO: We can do an ablation study for this
         state.particle_stress[p] = stress
+        state.particle_pressure[p] = pressure
 
         # if p == 0:
         #     print(stress)
@@ -84,6 +82,7 @@ def compute_dweight(model, w, dw, i, j, k):
 def p2g(state : ti.template(), model : ti.template(), dt: ti.f32):
     for p in range(model.n_particles):
         stress = state.particle_stress[p]
+        pressure = state.particle_pressure[p]
         grid_pos = state.particle_xyz[p] * model.inv_dx
         base_pos = (grid_pos - 0.5).cast(int) # Corner of the grid cell, subtracting 0.5 to get to the bottom-left
         fx = grid_pos - base_pos.cast(float)  # Distance from the base pos
@@ -111,11 +110,16 @@ def p2g(state : ti.template(), model : ti.template(), dt: ti.f32):
 
             # m_i^n       = Σ_p w_ip^n m_p,
             # m_i^n v_i^n = Σ_p w_ip^n m_p (v_p^n + C_p^n (x_i - x_p^n))
-
             elastic_force = -state.particle_vol[p] * stress @ dweight
+            fluid_pressure = state.particle_vol[p] * pressure * dweight
             v_in_add = (
                 weight * state.particle_mass[p] * (state.particle_vel[p] + C @ dpos) # v_i^n
                 + dt * elastic_force
+            )
+            if model.material == 6:
+                v_in_add = (
+                weight * state.particle_mass[p] * (state.particle_vel[p] + C @ dpos) # v_i^n
+                + dt * fluid_pressure
             )
             ti.atomic_add(state.grid_v_in[ix, iy, iz], v_in_add)
             ti.atomic_add(state.grid_mass[ix, iy, iz], weight * state.particle_mass[p])
@@ -253,7 +257,6 @@ def compute_mu_lam_from_E_nu(
 ):
     for p in range(n_particles):
         mu[p] = E[p] / (2.0 * (1.0 + nu[p]))
-        # mu[p] = 0.0
         lam[p] = E[p] * nu[p] / ((1.0 + nu[p]) * (1.0 - 2.0 * nu[p]))
 
 
@@ -326,5 +329,4 @@ def compute_cov_from_F(state: ti.template(), model: ti.template()):
         state.particle_cov[6 * p + 3] = cov[1, 1]
         state.particle_cov[6 * p + 4] = cov[1, 2]
         state.particle_cov[6 * p + 5] = cov[2, 2]
-
 

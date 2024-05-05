@@ -22,11 +22,14 @@ class MPM_model:
         self.init_other_params()        # 3. Conditioned on Yield Stress (von Mises, Herschel-Bulkley)
 
     def init_general_params(self):
-        self.material = material_types.get(self.args.material, -1)
-        if self.material != 0:
+        self.material = ti.field(dtype=ti.f32, shape=self.n_particles)
+
+        args_material = material_types.get(self.args.material, -1)
+        if args_material != 0 and args_material != 1 and args_material != 2 and args_material != 3:
             raise TypeError("Material not supported yet")
 
         self.gravity = ti.Vector(self.args.gravity)
+        self.material.fill(args_material)
 
         # self.grid_v_damping_scale = 1.1
 
@@ -35,20 +38,32 @@ class MPM_model:
         self.nu = ti.field(dtype=ti.f32, shape=self.n_particles)
         self.mu = ti.field(dtype=ti.f32, shape=self.n_particles)
         self.lam = ti.field(dtype=ti.f32, shape=self.n_particles)
+        self.gamma = ti.field(dtype=ti.f32, shape=self.n_particles)
+        self.rho0 = ti.field(dtype=ti.f32, shape=self.n_particles)
+        self.bulk = ti.field(dtype=ti.f32, shape=self.n_particles)
 
         self.E.fill(self.args.E)
         self.nu.fill(self.args.nu)
+        self.gamma.fill(7.0)
+        self.rho0.fill(1000.0)
+        self.bulk.fill(2150.0)
         compute_mu_lam_from_E_nu(self.n_particles, self.E, self.nu, self.mu, self.lam)
 
     def init_plasticity_params(self):
-        # self.friction_angle = self.args.friction_angle
-        # sin_phi = ti.sin(self.friction_angle / 180.0 * 3.141592653589793)
-        # self.alpha = ti.sqrt(2.0 / 3.0) * 2.0 * sin_phi / (3.0 - sin_phi)
-        pass 
+        self.friction_angle = 25.0 # self.args.friction_angle
+        sin_phi = ti.sin(self.friction_angle / 180.0 * 3.141592653589793)
+        self.alpha = ti.sqrt(2.0 / 3.0) * 2.0 * sin_phi / (3.0 - sin_phi)
+        # pass 
 
     def init_other_params(self):
-        # self.yield_stress = ti.field(dtype=ti.f32, shape=n_particles)
-        pass
+        self.yield_stress = ti.field(dtype=ti.f32, shape=self.n_particles) # Field for metal
+        self.yield_stress.fill(100.0)  # adjust
+        self.hardening = 1 # Field for metal
+        self.xi = 1 # Field for metal # adjust
+        self.plastic_viscosity = 10 # Field for foam # adjust
+        self.softening = 1.0 # Field for plasticine
+
+        # pass
 
     def modify_elasiticity_params(self):
 
@@ -70,6 +85,8 @@ class MPM_state:
         self.particle_F = ti.Matrix.field(3, 3, dtype=ti.f32, shape=n_particles)        # Deformation gradient
         self.particle_stress = ti.Matrix.field(3, 3, dtype=ti.f32, shape=n_particles)
         self.particle_C = ti.Matrix.field(3, 3, dtype=ti.f32, shape=n_particles)        # Affine momentum
+
+        self.particle_pressure = ti.field(dtype=ti.f32, shape=n_particles)
         
         self.particle_init_cov = ti.field(dtype=ti.f32, shape=n_particles * 6)          # Sec 3.4. A_p
         self.particle_cov = ti.field(dtype=ti.f32, shape=n_particles * 6)               # Sec 3.4. a_p(t)
@@ -82,6 +99,8 @@ class MPM_state:
         self.particle_vol.from_torch(volumes)
         self.particle_density.fill(args.density)
         compute_mass_from_vol_density(self.n_particles, self.particle_density, self.particle_vol, self.particle_mass)
+
+        self.particle_pressure.fill(0.0)
 
         self.particle_xyz.from_torch(xyzs)
         self.particle_vel.fill(0.0)

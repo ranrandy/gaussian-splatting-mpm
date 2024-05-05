@@ -49,6 +49,24 @@ class MaterialParamsModifier(BasicBC):
     def __init__(self, n_particles, bc_args, sim_args):
         self.mu = bc_args["mu"]
         self.density = bc_args["density"]
+        self.E = bc_args["E"]
+        self.nu = bc_args["nu"]
+        super().__init__(n_particles, bc_args, sim_args)
+
+    @ti.kernel
+    def apply(self, state : ti.template(), model : ti.template()):
+        for p in range(self.n_particles):
+            if all(ti.abs(state.particle_xyz[p] - self.center) < self.size): #TODO: Need to replace this with a mask
+                if self.mu != 1000:
+                    model.mu[p] = self.mu
+                model.nu[p] = self.nu
+                model.E[p] = self.E
+                state.particle_density[p] = self.density
+
+@ti.data_oriented
+class MaterialTypeModifier(BasicBC):
+    def __init__(self, n_particles, bc_args, sim_args):
+        self.material = bc_args["material"]
 
 
         super().__init__(n_particles, bc_args, sim_args)
@@ -57,11 +75,7 @@ class MaterialParamsModifier(BasicBC):
     def apply(self, state : ti.template(), model : ti.template()):
         for p in range(self.n_particles):
             if all(ti.abs(state.particle_xyz[p] - self.center) < self.size): #TODO: Need to replace this with a mask
-                model.mu[p] = self.mu
-                state.particle_density[p] = self.density
-
-                
-
+                model.material[p] = self.material
 
 preprocess_bc = (
     "impulse"
@@ -72,11 +86,13 @@ postprocess_bc = (
 )
 
 init_bc = (
-    "additional_params"
+    "additional_params",
+    "modify_material"
 )
 
 boundaryConditionTypeCallBacks = {
     "fixed_cube": BasicBC,
     "impulse" : ImpulseBC,
-    "additional_params" : MaterialParamsModifier
+    "additional_params" : MaterialParamsModifier,
+    "modify_material": MaterialTypeModifier
 }
