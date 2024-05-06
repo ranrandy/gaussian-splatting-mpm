@@ -102,12 +102,12 @@ def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, si
     rasterizer = GaussianRasterizer(raster_settings=raster_settings)
 
     # Rasterize visible Gaussians to image, obtain their radii (on screen). 
-    # means3D = torch.cat([pc.get_xyz[~sim_gs_mask], sim_means3D], dim=0)
-    means3D = pc.get_xyz[view_mask]
+    means3D = torch.cat([pc.get_xyz[~sim_gs_mask], sim_means3D], dim=0)
+    # means3D = pc.get_xyz[view_mask]
     opacities = torch.cat([pc.get_opacity[~sim_gs_mask], pc.get_opacity[sim_gs_mask]], dim=0)
     shs = torch.cat([pc.get_features[~sim_gs_mask], pc.get_features[sim_gs_mask]], dim=0)
-    # covs = torch.cat([pc.get_covariance()[~sim_gs_mask], sim_covs], dim=0)
-    covs = pc.get_covariance()[view_mask]
+    covs = torch.cat([pc.get_covariance()[~sim_gs_mask], sim_covs], dim=0)
+    # covs = pc.get_covariance()[view_mask]
 
     rendered_image, _ = rasterizer(
         means3D = means3D,

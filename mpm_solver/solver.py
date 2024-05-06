@@ -44,6 +44,7 @@ class MPM_Simulator:
         # Grid to Particle
         g2p(self.mpm_state, self.mpm_model, dt)
         
+        # print(self.time)
         self.time += dt
 
     def set_boundary_conditions(self, bc_args_arr, sim_args : MPMParams):

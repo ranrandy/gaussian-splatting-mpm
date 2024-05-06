@@ -19,7 +19,7 @@ class BasicBC:
         self.size = bc_args["size"]
 
         self.isCollide = False
-        
+
     @ti.kernel
     def apply(self, state : ti.template(), dx : float):
         for grid_xyz in ti.grouped(state.grid_v_out):
@@ -43,7 +43,6 @@ class ImpulseBC(BasicBC):
         for p in range(self.n_particles):
             if all(ti.abs(state.particle_xyz[p] - self.center) < self.size): #TODO: Need to replace this with a mask
                 state.particle_vel[p] = state.particle_vel[p] + self.force / state.particle_mass[p] * self.substep_dt
-
 
 preprocess_bc = (
     "impulse"
