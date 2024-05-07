@@ -15,14 +15,14 @@
             [0.0, -1.7, -0.5],
             [1.2, 0.1, 1.7]
         ],
-        "E": 6e3,
+        "E": 7e3,
         "nu": 0.1,
-        "material": "jelly",
+        "material": "plasticine",
         "density": 100.0,
         "n_grid": 50,
         "grid_extent": 2.0,
         "substep_dt": 1e-4,
-        "frame_dt": 1e-2,
+        "frame_dt": 1e-3,
         "gravity": [0.0, -320.0, 0.0],
         "rotation_degree": [167.594, -52.0748, -2.34919],
         "boundary_conditions": [
@@ -47,7 +47,7 @@
     "render": 
     {
         "output_path": "outputs/cake_fracture",
-        "view_cam_idx": 48,
-        "num_frames": 80
+        "view_cam_idx": 36,
+        "num_frames": 245
     }
 }

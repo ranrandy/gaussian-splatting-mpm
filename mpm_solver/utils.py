@@ -15,24 +15,24 @@ material_types = {
 @ti.kernel  ##### TODO: calculate the deformation gradients.
 def compute_stress_from_F_trial(state : ti.template(), model : ti.template(), dt: ti.f32):
     for p in range(model.n_particles):
-        # if model.material == 1:  # metal ??
-        #     state.particle_F[p] = von_mises_return_mapping(
-        #         state.particle_F_trial[p], model, p
-        #     )
-        # elif model.material == 2:  # sand  ??
-        #     state.particle_F[p] = sand_return_mapping(
-        #         state.particle_F_trial[p], state, model, p
-        #     )
-        # elif model.material == 3:  # visplas, with StVk + VM, no thickening ??
-        #     state.particle_F[p] = viscoplasticity_return_mapping_with_StVK(
-        #         state.particle_F_trial[p], model, p, dt
-        #     )
-        # elif model.material == 5:
-        #     state.particle_F[p] = von_mises_return_mapping_with_damage(
-        #         state.particle_F_trial[p], model, p
-        #     )
-        # else:
-        state.particle_F[p] = state.particle_F_trial[p]
+        if model.material == 1:  # metal ??
+            state.particle_F[p] = von_mises_return_mapping(
+                state.particle_F_trial[p], model, p
+            )
+        elif model.material == 2:  # sand  ??
+            state.particle_F[p] = sand_return_mapping(
+                state.particle_F_trial[p], state, model, p
+            )
+        elif model.material == 3:  # visplas, with StVk + VM, no thickening ??
+            state.particle_F[p] = viscoplasticity_return_mapping_with_StVK(
+                state.particle_F_trial[p], model, p, dt
+            )
+        elif model.material == 5:
+            state.particle_F[p] = von_mises_return_mapping_with_damage(
+                state.particle_F_trial[p], model, p
+            )
+        else:
+            state.particle_F[p] = state.particle_F_trial[p]
 
         J = state.particle_F[p].determinant()
         stress = ti.Matrix.zero(ti.f32, 3, 3)
@@ -46,20 +46,20 @@ def compute_stress_from_F_trial(state : ti.template(), model : ti.template(), dt
         #     print(V)
         #     print(model.material)
         #     print()
-        if model.material == 0:
+        if model.material == 0 or model.material == 5:
             stress = kirchoff_stress_FCR(state.particle_F[p], U, V, J, model.mu[p], model.lam[p])
-        # elif model.material == 1:
-        #     stress = kirchoff_stress_StVK(
-        #         state.particle_F[p], U, V, sig, model.mu[p], model.lam[p]
-        #     )
-        # elif model.material == 2:
-        #     stress = kirchoff_stress_Drucker_Prager(
-        #         state.particle_F[p], U, V, sig, model.mu[p], model.lam[p]
-        #     )
-        # elif model.material == 3:
-        #     stress = kirchoff_stress_StVK(
-        #         state.particle_F[p], U, V, sig, model.mu[p], model.lam[p]
-        #     )
+        elif model.material == 1:
+            stress = kirchoff_stress_StVK(
+                state.particle_F[p], U, V, S, model.mu[p], model.lam[p]
+            )
+        elif model.material == 2:
+            stress = kirchoff_stress_Drucker_Prager(
+                state.particle_F[p], U, V, S, model.mu[p], model.lam[p]
+            )
+        elif model.material == 3:
+            stress = kirchoff_stress_StVK(
+                state.particle_F[p], U, V, S, model.mu[p], model.lam[p]
+            )
 
         stress = (stress + stress.transpose()) / 2.0 #TODO: We can do an ablation study for this
         state.particle_stress[p] = stress

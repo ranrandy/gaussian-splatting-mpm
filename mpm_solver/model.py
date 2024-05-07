@@ -23,7 +23,7 @@ class MPM_model:
 
     def init_general_params(self):
         self.material = material_types.get(self.args.material, -1)
-        if self.material != 0:
+        if self.material == 4:
             raise TypeError("Material not supported yet")
 
         self.gravity = ti.Vector(self.args.gravity)
@@ -41,14 +41,18 @@ class MPM_model:
         compute_mu_lam_from_E_nu(self.n_particles, self.E, self.nu, self.mu, self.lam)
 
     def init_plasticity_params(self):
-        # self.friction_angle = self.args.friction_angle
-        # sin_phi = ti.sin(self.friction_angle / 180.0 * 3.141592653589793)
-        # self.alpha = ti.sqrt(2.0 / 3.0) * 2.0 * sin_phi / (3.0 - sin_phi)
-        pass 
+        self.friction_angle = 25.0 # self.args.friction_angle
+        sin_phi = ti.sin(self.friction_angle / 180.0 * 3.141592653589793)
+        self.alpha = ti.sqrt(2.0 / 3.0) * 2.0 * sin_phi / (3.0 - sin_phi)
+        # pass 
 
     def init_other_params(self):
-        # self.yield_stress = ti.field(dtype=ti.f32, shape=n_particles)
-        pass
+        self.yield_stress = ti.field(dtype=ti.f32, shape=self.n_particles) # Field for metal
+        self.yield_stress.fill(10000.0)  # adjust (was 100)
+        self.hardening = 1 # Field for metal
+        self.xi = 1 # Field for metal # adjust
+        self.plastic_viscosity = 10 # Field for foam # adjust
+        self.softening = 1.0 # Field for plasticine
 
 
 @ti.data_oriented
