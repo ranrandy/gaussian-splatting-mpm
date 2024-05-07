@@ -54,6 +54,7 @@ class MPMParams(ParamGroup):
         
         self.E = 2e6
         self.nu = 0.4
+        self.viscosity = 0.05
         self.material = "jelly"
 
         self.gravity = [0.0, 0.0, -9.81]

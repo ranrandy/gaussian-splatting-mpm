@@ -19,15 +19,6 @@ def kirchoff_stress_FCR(
     R = U @ V.transpose()
     return 2.0 * mu * (F - R) @ F.transpose() + ti.Matrix.identity(ti.f32, 3) * lam * J * (J - 1.0)
 
-@ti.func  
-def fluid_pressure(
-    density: ti.template(), 
-    gamma: ti.f32, 
-    pho0: ti.f32,
-    stiffness: ti.f32
-):
-
-    return -1.0 * stiffness * ((density / pho0) ** gamma - 1)
 
 @ti.func  # τ = U(2με + λsum(ε)1)V^T
 def kirchoff_stress_StVK(
@@ -165,6 +156,79 @@ def sand_return_mapping(F_trial, state, model, p):
         F_elastic = U @ tm.mat3(s_new[0], 0.0, 0.0, 0.0, s_new[1], 0.0, 0.0, 0.0, s_new[2]) @ V.transpose()
     return F_elastic
 
+@ti.func
+def fluid_return_mapping(F_trial, model, p, dt):
+    """
+    Perform return mapping for a cohesive fluid-like material to improve continuity between particles.
+    
+    Args:
+        F_trial (ti.Matrix): Trial deformation gradient matrix.
+        state: Object holding state variables of the particles or elements.
+        model: Object containing material model parameters.
+        p (int): Index identifying the current particle/element.
+        dt (float): Time step size.
+    
+    Returns:
+        F_cohesive (ti.Matrix): Modified deformation gradient matrix representing cohesive fluid-like behavior.
+    """
+    # Perform SVD decomposition
+    U, sig_mat, V = ti.svd(F_trial)
+    sig = tm.vec3(sig_mat[0, 0], sig_mat[1, 1], sig_mat[2, 2])
+
+    # Logarithmic strains (soft yielding)
+    epsilon = tm.vec3(
+        ti.log(ti.max(ti.abs(sig[0]), 0.01)),
+        ti.log(ti.max(ti.abs(sig[1]), 0.01)),
+        ti.log(ti.max(ti.abs(sig[2]), 0.01))
+    )
+    tr = epsilon[0] + epsilon[1] + epsilon[2]
+    epsilon_hat = epsilon - tm.vec3(tr / 3.0)
+
+    # Trial deviatoric stress
+    s_trial = 2.0 * model.mu[p] * epsilon_hat
+    s_trial_norm = tm.length(s_trial)
+
+    # Gradual yield threshold (smoother transition)
+    yield_stress = model.yield_stress[p]
+    yield_value = s_trial_norm - ti.sqrt(2.0 / 3.0) * yield_stress
+
+    # Initialize the cohesive return matrix
+    F_cohesive = tm.mat3(0.0)
+
+    # Check for yielding
+    if yield_value > 0:
+        # Effective shear modulus with increased viscosity
+        mu_hat = model.mu[p] * (sig[0] ** 2 + sig[1] ** 2 + sig[2] ** 2) / 3.0
+        plastic_factor = 1.0 + model.plastic_viscosity / (2.0 * mu_hat * dt)
+
+        # Reduced deviatoric stress with smoother yielding
+        s_new_norm = s_trial_norm - yield_value / plastic_factor
+        s_new = (s_new_norm / s_trial_norm) * s_trial
+
+        # Recompute new elastic strains considering plastic flow
+        epsilon_new = (1.0 / (2.0 * model.mu[p])) * s_new + tm.vec3(tr / 3.0)
+
+        # Construct elastic stretch matrix
+        sig_elastic = tm.mat3(
+            tm.exp(epsilon_new[0]),
+            0.0,
+            0.0,
+            0.0,
+            tm.exp(epsilon_new[1]),
+            0.0,
+            0.0,
+            0.0,
+            tm.exp(epsilon_new[2])
+        )
+
+        # Final deformation gradient with cohesive yield adjustments
+        F_cohesive = U @ sig_elastic @ V.transpose()
+    else:
+        # Elastic behavior (more fluid-like)
+        F_cohesive = F_trial
+
+    return F_cohesive
+
 # for toothpaste
 @ti.func
 def viscoplasticity_return_mapping_with_StVK(F_trial, model, p, dt):
@@ -186,12 +250,12 @@ def viscoplasticity_return_mapping_with_StVK(F_trial, model, p, dt):
     epsilon_hat = epsilon - tm.vec3(trace_epsilon / 3.0)
     s_trial = 2.0 * model.mu[p] * epsilon_hat
     s_trial_norm = tm.length(s_trial)
-    y = s_trial_norm - ti.sqrt(2.0 / 3.0) * model.yield_stress[p]
+    y = s_trial_norm - 0.8 * ti.sqrt(2.0 / 3.0) * model.yield_stress[p]
     F = tm.mat3(0.0)
     if y > 0:
         mu_hat = model.mu[p] * (b_trial[0] + b_trial[1] + b_trial[2]) / 3.0
         s_new_norm = s_trial_norm - y / (
-            1.0 + model.plastic_viscosity / (2.0 * mu_hat * dt)
+            1.0 + model.plastic_viscosity * 2 / (2.0 * mu_hat * dt)
         )
         s_new = (s_new_norm / s_trial_norm) * s_trial
         epsilon_new = 1.0 / (2.0 * model.mu[p]) * s_new + tm.vec3(trace_epsilon / 3.0)

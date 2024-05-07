@@ -38,15 +38,11 @@ class MPM_model:
         self.nu = ti.field(dtype=ti.f32, shape=self.n_particles)
         self.mu = ti.field(dtype=ti.f32, shape=self.n_particles)
         self.lam = ti.field(dtype=ti.f32, shape=self.n_particles)
-        self.gamma = ti.field(dtype=ti.f32, shape=self.n_particles)
-        self.rho0 = ti.field(dtype=ti.f32, shape=self.n_particles)
-        self.bulk = ti.field(dtype=ti.f32, shape=self.n_particles)
+        self.viscosity = ti.field(dtype=ti.f32, shape=self.n_particles)
 
         self.E.fill(self.args.E)
         self.nu.fill(self.args.nu)
-        self.gamma.fill(7.0)
-        self.rho0.fill(1000.0)
-        self.bulk.fill(2150.0)
+        self.viscosity.fill(self.args.viscosity)
         compute_mu_lam_from_E_nu(self.n_particles, self.E, self.nu, self.mu, self.lam)
 
     def init_plasticity_params(self):
@@ -57,10 +53,10 @@ class MPM_model:
 
     def init_other_params(self):
         self.yield_stress = ti.field(dtype=ti.f32, shape=self.n_particles) # Field for metal
-        self.yield_stress.fill(100.0)  # adjust
+        self.yield_stress.fill(0.01)  # adjust
         self.hardening = 1 # Field for metal
         self.xi = 1 # Field for metal # adjust
-        self.plastic_viscosity = 10 # Field for foam # adjust
+        self.plastic_viscosity = 1 # Field for foam # adjust
         self.softening = 1.0 # Field for plasticine
 
         # pass

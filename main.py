@@ -79,8 +79,8 @@ def load_cameras(args):
 def modify_cam(viewpoint_camera : TinyCam, center_view_world_space, observant_coordinates):
     position, R = get_camera_position_and_rotation(
                     130,
-                    0,
-                    5.75,
+                    20,
+                    4.75,
                     center_view_world_space,
                     observant_coordinates,
                 )
@@ -247,7 +247,7 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     mpm_solver.set_boundary_conditions(sim_args.boundary_conditions, sim_args)
 
 
-    mpm_solver.add_surface_collider((0.0, 0.0, 0.4), (0.0, 0.0, 1.0))
+    mpm_solver.add_surface_collider((0.0, 0.0, 0.5), (0.0, 0.0, 1.0))
     # mpm_solver.add_surface_collider((0.0, 0.5, 0.0,), (0.0, 1.0, 0.0))
     # mpm_solver.add_surface_collider((0.5, 0.0, 0.0), (1.0, 0.0, 0.0))
     # mpm_solver.add_surface_collider((2.0, 0.0, 0.0), (-1.0, 0.0, 0.0))

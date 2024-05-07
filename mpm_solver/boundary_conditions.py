@@ -51,22 +51,29 @@ class MaterialParamsModifier(BasicBC):
         self.density = bc_args["density"]
         self.E = bc_args["E"]
         self.nu = bc_args["nu"]
+        self.isMaterial = False
         super().__init__(n_particles, bc_args, sim_args)
 
     @ti.kernel
     def apply(self, state : ti.template(), model : ti.template()):
         for p in range(self.n_particles):
             if all(ti.abs(state.particle_xyz[p] - self.center) < self.size): #TODO: Need to replace this with a mask
-                if self.mu != 1000:
-                    model.mu[p] = self.mu
                 model.nu[p] = self.nu
                 model.E[p] = self.E
                 state.particle_density[p] = self.density
+
+    @ti.kernel
+    def applymu(self, state : ti.template(), model : ti.template()):
+        for p in range(self.n_particles):
+            if all(ti.abs(state.particle_xyz[p] - self.center) < self.size): #TODO: Need to replace this with a mask
+                if self.mu != 1000:
+                    model.mu[p] = self.mu
 
 @ti.data_oriented
 class MaterialTypeModifier(BasicBC):
     def __init__(self, n_particles, bc_args, sim_args):
         self.material = bc_args["material"]
+        self.isMaterial = True
 
 
         super().__init__(n_particles, bc_args, sim_args)

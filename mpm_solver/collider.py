@@ -40,7 +40,7 @@ class MPM_Collider:
                     ) * tm.normalize(
                         v
                     )  # apply friction here
-                state.grid_v_out[grid_x, grid_y, grid_z] = v * 0.99
+                state.grid_v_out[grid_x, grid_y, grid_z] = v * 0.7
 
 
 collideTypeCallBacks = {

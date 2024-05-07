@@ -64,6 +64,9 @@ class MPM_Simulator:
 
         for pp in self.init_particles:
             pp.apply(self.mpm_state, self.mpm_model)
+            if pp.isMaterial == False:
+                compute_mu_lam_from_E_nu(self.n_particles, self.mpm_model.E, self.mpm_model.nu, self.mpm_model.mu, self.mpm_model.lam)
+                pp.applymu(self.mpm_state, self.mpm_model)
 
     def postprocess(self):
         compute_cov_from_F(self.mpm_state, self.mpm_model)

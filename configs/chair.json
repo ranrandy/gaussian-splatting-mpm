@@ -13,19 +13,20 @@
         ],
         "E": 5e5,
         "nu": 0.4,
+        "viscosity": 0.05,
         "material": "metal",
-        "density": 200.0,
+        "density": 100.0,
         "n_grid": 100,
         "grid_extent": 2.0,
         "substep_dt": 1e-4,
         "frame_dt": 1e-2,
-        "gravity": [0.0, 0.0, -4.0],
+        "gravity": [0.0, 0.0, -6.0],
         "boundary_conditions": [
             {
                 "id": 0,
                 "type": "fixed_cube",
                 "center": [2.0, 1.0, 1.0],
-                "size": [0.3, 2.0, 2.0],
+                "size": [0.4, 2.0, 2.0],
                 "start_time": 0,
                 "num_dt": 10000000000000
             },
@@ -34,15 +35,15 @@
                 "type": "impulse",
                 "center": [1.0, 0.88, 1.5],
                 "size": [0.1, 0.1, 0.2],
-                "force": [0.0, 0.0, -0.04],
+                "force": [0.0, 0.0, -0.05],
                 "start_time": 0,
-                "num_dt": 5
+                "num_dt": 8
             },
             {
                 "id": 3,
                 "type": "fixed_cube",
                 "center": [0.0, 1.0, 1.0],
-                "size": [0.3, 2.0, 2.0],
+                "size": [0.4, 2.0, 2.0],
                 "start_time": 0,
                 "num_dt": 100000000000000000
             },
@@ -50,7 +51,7 @@
                 "id": 4,
                 "type": "fixed_cube",
                 "center": [1.0, 2.0, 1.0],
-                "size": [2.0, 0.3, 2.0],
+                "size": [2.0, 0.4, 2.0],
                 "start_time": 0,
                 "num_dt": 100000000000000000000
             },
@@ -58,7 +59,7 @@
                 "id": 5,
                 "type": "fixed_cube",
                 "center": [1.0, 0.0, 1.0],
-                "size": [2.0, 0.3, 2.0],
+                "size": [2.0, 0.4, 2.0],
                 "start_time": 0,
                 "num_dt": 100000000000000000000000
             },
@@ -66,7 +67,7 @@
                 "id": 6,
                 "type": "fixed_cube",
                 "center": [1.0, 1.0, 2.0],
-                "size": [2.0, 2.0, 0.3],
+                "size": [2.0, 2.0, 0.4],
                 "start_time": 0,
                 "num_dt": 100000000000000
             },
@@ -74,30 +75,30 @@
                 "id": 7,
                 "type": "fixed_cube",
                 "center": [1.0, 1.0, 0.0],
-                "size": [2.0, 2.0, 0.5],
+                "size": [2.0, 2.0, 0.4],
                 "start_time": 0,
-                "num_dt": 1
+                "num_dt": 10000000000000000
             },
             {
                 "id": 8,
                 "type": "additional_params",
                 "center": [1.0, 0.88, 1.6],
-                "size": [0.2, 0.2, 0.4],
+                "size": [0.2, 0.2, 0.5],
                 "start_time": 0,
                 "num_dt": 100000000000000,
-                "E": 2e3,
-                "nu": 0.2,
-                "density": 20,
-                "mu": 0.0
+                "E": 2e5,
+                "nu": 0.1,
+                "density": 20.0,
+                "mu": 1000
             },           
             {
                 "id": 9,
                 "type": "modify_material",
                 "center": [1.0, 0.88, 1.6],
-                "size": [0.2, 0.2, 0.4],
+                "size": [0.2, 0.2, 0.5],
                 "start_time": 0,
                 "num_dt": 100000000000000,
-                "material": 5
+                "material": 2
             }
         ]
     },
