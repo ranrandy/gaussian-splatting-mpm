@@ -39,6 +39,8 @@ def load_model(args):
         loaded_iter = args.loaded_iter
     print("Loading trained model at iteration {}".format(loaded_iter))
 
+    # gaussians.load_ply(os.path.join(args.model_path, "point_cloud", "iteration_" + str(loaded_iter), "point_cloud.ply"))
+
     gaussians.load_multiple_plys([os.path.join(args.model_path, "point_cloud", "iteration_" + str(loaded_iter), "point_cloud.ply"), os.path.join(args.model_path, "point_cloud", "iteration_" + str(loaded_iter), "point_cloud2.ply")])
     return gaussians
 
@@ -78,9 +80,9 @@ def load_cameras(args):
 
 def modify_cam(viewpoint_camera : TinyCam, center_view_world_space, observant_coordinates):
     position, R = get_camera_position_and_rotation(
-                    130,
-                    20,
-                    4.75,
+                    100,
+                    60,
+                    40.75,
                     center_view_world_space,
                     observant_coordinates,
                 )
@@ -110,8 +112,8 @@ def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, si
     tanfovy = math.tan(viewpoint_camera.FovY * 0.5)
 
     raster_settings = GaussianRasterizationSettings(
-        image_height=int(viewpoint_camera.height),
-        image_width=int(viewpoint_camera.width),
+        image_height=1060,
+        image_width=1888,
         tanfovx=tanfovx,
         tanfovy=tanfovy,
         bg=bg_color,
@@ -216,7 +218,7 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     transformed_sim_covs = sim_covs * (scaling_modifier * scaling_modifier)
 
     mpm_space_viewpoint_center = (
-        torch.tensor([0.5, 0.5, 0.5]).reshape((1, 3)).cuda()
+        torch.tensor([0.5, 1.4, -0.1]).reshape((1, 3)).cuda()
     )
     mpm_space_vertical_upward_axis = (
         torch.tensor([0, 0, 1])
@@ -247,7 +249,7 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     mpm_solver.set_boundary_conditions(sim_args.boundary_conditions, sim_args)
 
 
-    mpm_solver.add_surface_collider((0.0, 0.0, 0.5), (0.0, 0.0, 1.0))
+    mpm_solver.add_surface_collider((0.0, 0.0, 0.67), (0.0, 0.0, 1.0))
     # mpm_solver.add_surface_collider((0.0, 0.5, 0.0,), (0.0, 1.0, 0.0))
     # mpm_solver.add_surface_collider((0.5, 0.0, 0.0), (1.0, 0.0, 0.0))
     # mpm_solver.add_surface_collider((2.0, 0.0, 0.0), (-1.0, 0.0, 0.0))
@@ -282,7 +284,7 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
         rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, sim_means3D, sim_covs, background, model_args, rotation_matrices, pos_center)
         save_frame(rendered_img, save_images_folder, fid, rendered_img_seq)
 
-    os.system(f"ffmpeg -framerate 25 -i {save_images_folder}/%04d.png -c:v libx264 -s {viewpoint_camera.width}x{viewpoint_camera.height} -y -pix_fmt yuv420p {render_args.output_path}/simulated.mp4")
+    os.system(f"ffmpeg -framerate 25 -i {save_images_folder}/%04d.png -c:v libx264 -s {viewpoint_camera.width}x{viewpoint_camera.height-1} -y -pix_fmt yuv420p {render_args.output_path}/simulated.mp4")
 
     print("Done.")
 
