@@ -1,7 +1,7 @@
 {
     "model": 
     {
-        "model_path": "models/udon",
+        "model_path": "models/cupnoodle",
         "white_background": true,
         "loaded_iter": 30000
     },
@@ -20,7 +20,7 @@
         "grid_extent": 2.0,
         "substep_dt": 1e-4,
         "frame_dt": 1e-2,
-        "gravity": [0.0, 0.0, -10.0],
+        "gravity": [0.0, 0.0, -20.0],
         "boundary_conditions": [
             {
                 "id": 0,
@@ -33,11 +33,11 @@
             {
                 "id": 1,
                 "type": "impulse",
-                "center": [0.92, 0.86, 0.75],
-                "size": [0.01, 0.01, 0.1],
-                "force": [0.0, 0.0, 25.5],
+                "center": [1.08, 0.75, 1.6],
+                "size": [0.3, 0.3, 0.4],
+                "force": [0.0, 0.0, -0.131],
                 "start_time": 0,
-                "num_dt": 8
+                "num_dt": 1
             },
             {
                 "id": 3,
@@ -82,7 +82,7 @@
             {
                 "id": 8,
                 "type": "additional_params",
-                "center": [0.96, 0.82, 0.85],
+                "center": [0.96, 0.82, 0.9],
                 "size": [0.12, 0.12, 0.25],
                 "start_time": 0,
                 "num_dt": 100000000000000,
@@ -94,38 +94,11 @@
             {
                 "id": 9,
                 "type": "modify_material",
-                "center": [0.96, 0.84, 0.85],
+                "center": [0.96, 0.84, 0.9],
                 "size": [0.12, 0.12, 0.25],
                 "start_time": 0,
                 "num_dt": 100000000000000,
                 "material": 2
-            },
-            {
-                "id": 10,
-                "type": "impulse",
-                "center": [1.0, 0.78, 0.75],
-                "size": [0.01, 0.01, 0.1],
-                "force": [0.0, 0.0, 25.5],
-                "start_time": 0,
-                "num_dt": 8
-            },
-            {
-                "id": 11,
-                "type": "impulse",
-                "center": [1.0, 0.86, 0.75],
-                "size": [0.01, 0.01, 0.1],
-                "force": [0.0, 0.0, 25.5],
-                "start_time": 0,
-                "num_dt": 8
-            },
-            {
-                "id": 12,
-                "type": "impulse",
-                "center": [0.92, 0.78, 0.75],
-                "size": [0.01, 0.01, 0.1],
-                "force": [0.0, 0.0, 25.5],
-                "start_time": 0,
-                "num_dt": 8
             }
         ]
     },

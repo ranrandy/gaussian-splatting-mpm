@@ -112,8 +112,8 @@ def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, si
     tanfovy = math.tan(viewpoint_camera.FovY * 0.5)
 
     raster_settings = GaussianRasterizationSettings(
-        image_height=1060,
-        image_width=1888,
+        image_height=viewpoint_camera.height,
+        image_width=viewpoint_camera.width,
         tanfovx=tanfovx,
         tanfovy=tanfovy,
         bg=bg_color,
@@ -249,7 +249,7 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     mpm_solver.set_boundary_conditions(sim_args.boundary_conditions, sim_args)
 
 
-    mpm_solver.add_surface_collider((0.0, 0.0, 0.67), (0.0, 0.0, 1.0))
+    mpm_solver.add_surface_collider((0.0, 0.0, 0.76), (0.0, 0.0, 1.0))
     # mpm_solver.add_surface_collider((0.0, 0.5, 0.0,), (0.0, 1.0, 0.0))
     # mpm_solver.add_surface_collider((0.5, 0.0, 0.0), (1.0, 0.0, 0.0))
     # mpm_solver.add_surface_collider((2.0, 0.0, 0.0), (-1.0, 0.0, 0.0))
@@ -284,7 +284,7 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
         rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, sim_means3D, sim_covs, background, model_args, rotation_matrices, pos_center)
         save_frame(rendered_img, save_images_folder, fid, rendered_img_seq)
 
-    os.system(f"ffmpeg -framerate 25 -i {save_images_folder}/%04d.png -c:v libx264 -s {viewpoint_camera.width}x{viewpoint_camera.height-1} -y -pix_fmt yuv420p {render_args.output_path}/simulated.mp4")
+    os.system(f"ffmpeg -framerate 25 -i {save_images_folder}/%04d.png -c:v libx264 -s {viewpoint_camera.width}x{viewpoint_camera.height} -y -pix_fmt yuv420p {render_args.output_path}/simulated.mp4")
 
     print("Done.")
 
@@ -307,3 +307,31 @@ if __name__ == "__main__":
     simulate(model_args.extract(args), sim_args.extract(args), render_args.extract(args))
 
 
+# ,
+#             {
+#                 "id": 10,
+#                 "type": "impulse",
+#                 "center": [1.0, 0.78, 0.75],
+#                 "size": [0.01, 0.01, 0.1],
+#                 "force": [0.0, 0.0, 25.5],
+#                 "start_time": 0,
+#                 "num_dt": 8
+#             },
+#             {
+#                 "id": 11,
+#                 "type": "impulse",
+#                 "center": [1.0, 0.86, 0.75],
+#                 "size": [0.01, 0.01, 0.1],
+#                 "force": [0.0, 0.0, 25.5],
+#                 "start_time": 0,
+#                 "num_dt": 8
+#             },
+#             {
+#                 "id": 12,
+#                 "type": "impulse",
+#                 "center": [0.92, 0.78, 0.75],
+#                 "size": [0.01, 0.01, 0.1],
+#                 "force": [0.0, 0.0, 25.5],
+#                 "start_time": 0,
+#                 "num_dt": 8
+#             }
