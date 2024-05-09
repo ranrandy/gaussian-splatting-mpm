@@ -53,10 +53,10 @@ class MPM_model:
 
     def init_other_params(self):
         self.yield_stress = ti.field(dtype=ti.f32, shape=self.n_particles) # Field for metal
-        self.yield_stress.fill(0.01)  # adjust
+        self.yield_stress.fill(0.005)  # adjust
         self.hardening = 1 # Field for metal
         self.xi = 1 # Field for metal # adjust
-        self.plastic_viscosity = 1 # Field for foam # adjust
+        self.plastic_viscosity = 0.008 # Field for foam # adjust
         self.softening = 1.0 # Field for plasticine
 
         # pass
