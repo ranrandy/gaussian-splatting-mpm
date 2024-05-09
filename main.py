@@ -82,7 +82,7 @@ def modify_cam(viewpoint_camera : TinyCam, center_view_world_space, observant_co
     position, R = get_camera_position_and_rotation(
                     100,
                     60,
-                    40.75,
+                    38,
                     center_view_world_space,
                     observant_coordinates,
                 )
@@ -218,7 +218,7 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     transformed_sim_covs = sim_covs * (scaling_modifier * scaling_modifier)
 
     mpm_space_viewpoint_center = (
-        torch.tensor([0.5, 1.4, -0.1]).reshape((1, 3)).cuda()
+        torch.tensor([0.53, 1.45, -0.1]).reshape((1, 3)).cuda()
     )
     mpm_space_vertical_upward_axis = (
         torch.tensor([0, 0, 1])
