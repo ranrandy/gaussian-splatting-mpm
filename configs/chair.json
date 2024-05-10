@@ -14,13 +14,13 @@
         "E": 5e5,
         "nu": 0.4,
         "viscosity": 0.05,
-        "material": "metal",
+        "material": "jelly",
         "density": 100.0,
         "n_grid": 100,
         "grid_extent": 2.0,
         "substep_dt": 1e-4,
         "frame_dt": 1e-2,
-        "gravity": [0.0, 0.0, -6.0],
+        "gravity": [0.0, 0.0, -10.0],
         "boundary_conditions": [
             {
                 "id": 0,
@@ -86,7 +86,7 @@
                 "size": [0.2, 0.2, 0.5],
                 "start_time": 0,
                 "num_dt": 100000000000000,
-                "E": 2e5,
+                "E": 2e3,
                 "nu": 0.1,
                 "density": 20.0,
                 "mu": 1000
@@ -98,7 +98,7 @@
                 "size": [0.2, 0.2, 0.5],
                 "start_time": 0,
                 "num_dt": 100000000000000,
-                "material": 2
+                "material": 0
             }
         ]
     },

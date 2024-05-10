@@ -120,7 +120,7 @@ def von_mises_return_mapping(F_trial, model, p):
     return F
     
 @ti.func
-def sand_return_mapping(F_trial, state, model, p):
+def sand_return_mapping(F_trial, model, p):
     U, sig_mat, V = ti.svd(F_trial)
     sig = tm.vec3(sig_mat[0,0], sig_mat[1,1], sig_mat[2,2])
 

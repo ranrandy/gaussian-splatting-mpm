@@ -80,9 +80,9 @@ def load_cameras(args):
 
 def modify_cam(viewpoint_camera : TinyCam, center_view_world_space, observant_coordinates):
     position, R = get_camera_position_and_rotation(
-                    100,
-                    60,
-                    38,
+                    130,
+                    10,
+                    5.75,
                     center_view_world_space,
                     observant_coordinates,
                 )
@@ -218,7 +218,7 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     transformed_sim_covs = sim_covs * (scaling_modifier * scaling_modifier)
 
     mpm_space_viewpoint_center = (
-        torch.tensor([0.53, 1.45, -0.1]).reshape((1, 3)).cuda()
+        torch.tensor([0.5, 0.5, 0.5]).reshape((1, 3)).cuda()
     )
     mpm_space_vertical_upward_axis = (
         torch.tensor([0, 0, 1])
@@ -249,12 +249,12 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     mpm_solver.set_boundary_conditions(sim_args.boundary_conditions, sim_args)
 
 
-    mpm_solver.add_surface_collider((0.0, 0.0, 0.76), (0.0, 0.0, 1.0))
-    # mpm_solver.add_surface_collider((0.0, 0.5, 0.0,), (0.0, 1.0, 0.0))
-    # mpm_solver.add_surface_collider((0.5, 0.0, 0.0), (1.0, 0.0, 0.0))
-    # mpm_solver.add_surface_collider((2.0, 0.0, 0.0), (-1.0, 0.0, 0.0))
-    # mpm_solver.add_surface_collider((0.0, 2.0, 0.0), (0.0, -1.0, 0.0))
-    # mpm_solver.add_surface_collider((0.0, 0.0, 2.0), (0.0, 0.0, -1.0))
+    mpm_solver.add_surface_collider((0.0, 0.0, 0.4), (0.0, 0.0, 1.0))
+    # mpm_solver.add_surface_collider((0.0, 1.5, 0.0,), (0.0, 1.0, 0.0))
+    # mpm_solver.add_surface_collider((0.3, 0.0, 0.0), (1.0, 0.0, 0.0))
+    # mpm_solver.add_surface_collider((1.7, 0.0, 0.0), (-1.0, 0.0, 0.0))
+    # mpm_solver.add_surface_collider((0.0, 1.7, 0.0), (0.0, -1.0, 0.0))
+    # mpm_solver.add_surface_collider((0.0, 0.0, 1.7), (0.0, 0.0, -1.0))
 
 
     # # Test for adding a surface collider
@@ -305,33 +305,3 @@ if __name__ == "__main__":
     args = parser.parse_args(remaining_argv)
 
     simulate(model_args.extract(args), sim_args.extract(args), render_args.extract(args))
-
-
-# ,
-#             {
-#                 "id": 10,
-#                 "type": "impulse",
-#                 "center": [1.0, 0.78, 0.75],
-#                 "size": [0.01, 0.01, 0.1],
-#                 "force": [0.0, 0.0, 25.5],
-#                 "start_time": 0,
-#                 "num_dt": 8
-#             },
-#             {
-#                 "id": 11,
-#                 "type": "impulse",
-#                 "center": [1.0, 0.86, 0.75],
-#                 "size": [0.01, 0.01, 0.1],
-#                 "force": [0.0, 0.0, 25.5],
-#                 "start_time": 0,
-#                 "num_dt": 8
-#             },
-#             {
-#                 "id": 12,
-#                 "type": "impulse",
-#                 "center": [0.92, 0.78, 0.75],
-#                 "size": [0.01, 0.01, 0.1],
-#                 "force": [0.0, 0.0, 25.5],
-#                 "start_time": 0,
-#                 "num_dt": 8
-#             }

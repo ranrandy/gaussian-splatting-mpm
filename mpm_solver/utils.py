@@ -22,8 +22,8 @@ def compute_stress_from_F_trial(state : ti.template(), model : ti.template(), dt
                 state.particle_F_trial[p], model, p
             )
         elif model.material[p] == 2:  # sand
-            state.particle_F[p] = fluid_return_mapping(
-                state.particle_F_trial[p], model, p, dt
+            state.particle_F[p] = sand_return_mapping(
+                state.particle_F_trial[p], model, p
             )
         elif model.material == 3:     # visplas, with StVk + VM, no thickening ??
             state.particle_F[p] = viscoplasticity_return_mapping_with_StVK(
@@ -42,13 +42,13 @@ def compute_stress_from_F_trial(state : ti.template(), model : ti.template(), dt
 
         pressure = 0.0
 
-        if model.material[p] == 2 :   
+        if model.material[p] == 0 :   
             stress = kirchoff_stress_FCR(state.particle_F[p], U, V, J, model.mu[p], model.lam[p])
         elif model.material[p] == 1:
             stress = kirchoff_stress_StVK(
                 state.particle_F[p], U, V, S, model.mu[p], model.lam[p]
             )
-        elif model.material[p] == 0: # sand
+        elif model.material[p] == 2: # sand
             stress = kirchoff_stress_Drucker_Prager(
                 state.particle_F[p], U, V, S, model.mu[p], model.lam[p]
             )
