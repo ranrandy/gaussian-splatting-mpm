@@ -1,7 +1,5 @@
 .vscode*
 
-models/garden
-
 *__pycache__*
 
 *images*
@@ -15,3 +13,5 @@ screenshots*
 *pencil*
 
 *data*
+
+*models*
