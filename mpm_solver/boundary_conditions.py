@@ -18,6 +18,8 @@ class BasicBC:
         self.center = bc_args["center"]
         self.size = bc_args["size"]
 
+        self.isCollide = False
+
     @ti.kernel
     def apply(self, state : ti.template(), dx : float):
         for grid_xyz in ti.grouped(state.grid_v_out):
@@ -42,6 +44,45 @@ class ImpulseBC(BasicBC):
             if all(ti.abs(state.particle_xyz[p] - self.center) < self.size): #TODO: Need to replace this with a mask
                 state.particle_vel[p] = state.particle_vel[p] + self.force / state.particle_mass[p] * self.substep_dt
 
+@ti.data_oriented
+class MaterialParamsModifier(BasicBC):
+    def __init__(self, n_particles, bc_args, sim_args):
+        self.mu = bc_args["mu"]
+        self.density = bc_args["density"]
+        self.E = bc_args["E"]
+        self.nu = bc_args["nu"]
+        self.isMaterial = False
+        super().__init__(n_particles, bc_args, sim_args)
+
+    @ti.kernel
+    def apply(self, state : ti.template(), model : ti.template()):
+        for p in range(self.n_particles):
+            if all(ti.abs(state.particle_xyz[p] - self.center) < self.size): #TODO: Need to replace this with a mask
+                model.nu[p] = self.nu
+                model.E[p] = self.E
+                state.particle_density[p] = self.density
+
+    @ti.kernel
+    def applymu(self, state : ti.template(), model : ti.template()):
+        for p in range(self.n_particles):
+            if all(ti.abs(state.particle_xyz[p] - self.center) < self.size): #TODO: Need to replace this with a mask
+                if self.mu != 1000:
+                    model.mu[p] = self.mu
+
+@ti.data_oriented
+class MaterialTypeModifier(BasicBC):
+    def __init__(self, n_particles, bc_args, sim_args):
+        self.material = bc_args["material"]
+        self.isMaterial = True
+
+
+        super().__init__(n_particles, bc_args, sim_args)
+
+    @ti.kernel
+    def apply(self, state : ti.template(), model : ti.template()):
+        for p in range(self.n_particles):
+            if all(ti.abs(state.particle_xyz[p] - self.center) < self.size): #TODO: Need to replace this with a mask
+                model.material[p] = self.material
 
 @ti.data_oriented
 class StickyGroundBC(BasicBC):
@@ -62,8 +103,15 @@ postprocess_bc = (
     "sticky_ground"
 )
 
+init_bc = (
+    "additional_params",
+    "modify_material"
+)
+
 boundaryConditionTypeCallBacks = {
     "fixed_cube": BasicBC,
     "impulse" : ImpulseBC,
-    "sticky_ground" : StickyGroundBC
+    "sticky_ground" : StickyGroundBC,
+    "additional_params" : MaterialParamsModifier,
+    "modify_material": MaterialTypeModifier
 }

@@ -22,27 +22,40 @@ class MPM_model:
         self.init_other_params()        # 3. Conditioned on Yield Stress (von Mises, Herschel-Bulkley)
 
     def init_general_params(self):
-        self.material = material_types.get(self.args.material, -1)
-        if self.material != 0:
+        self.material = ti.field(dtype=ti.f32, shape=self.n_particles)
+
+        args_material = material_types.get(self.args.material, -1)
+        if args_material != 0 and args_material != 1 and args_material != 2 and args_material != 3:
             raise TypeError("Material not supported yet")
 
         self.gravity = ti.Vector(self.args.gravity)
+        self.material.fill(args_material)
 
     def init_elasiticity_params(self):
         self.logE = ti.field(dtype=ti.f32, shape=self.n_particles, needs_grad=self.args.fitting)
         self.y = ti.field(dtype=ti.f32, shape=self.n_particles, needs_grad=self.args.fitting)
         self.mu = ti.field(dtype=ti.f32, shape=self.n_particles, needs_grad=self.args.fitting)
         self.lam = ti.field(dtype=ti.f32, shape=self.n_particles, needs_grad=self.args.fitting)
+        self.viscosity = ti.field(dtype=ti.f32, shape=self.n_particles)
 
         self.logE.fill(math.log10(self.args.E))
         self.y.fill(-math.log(0.49 / self.args.nu - 1))
         compute_mu_lam_from_E_nu(self.n_particles, self.logE, self.y, self.mu, self.lam)
 
+        self.viscosity.fill(self.args.viscosity)
+
     def init_plasticity_params(self):
-        pass 
+        self.friction_angle = 25.0 # self.args.friction_angle
+        sin_phi = ti.sin(self.friction_angle / 180.0 * 3.141592653589793)
+        self.alpha = ti.sqrt(2.0 / 3.0) * 2.0 * sin_phi / (3.0 - sin_phi)
 
     def init_other_params(self):
-        pass
+        self.yield_stress = ti.field(dtype=ti.f32, shape=self.n_particles) # Field for metal
+        self.yield_stress.fill(0.005)  # adjust
+        self.hardening = 1 # Field for metal
+        self.xi = 1 # Field for metal # adjust
+        self.plastic_viscosity = 0.008 # Field for foam # adjust
+        self.softening = 1.0 # Field for plasticine
 
     def clear_grad(self):
         self.logE.grad.fill(0.0)
@@ -67,9 +80,13 @@ class MPM_state:
         self.particle_stress = ti.Matrix.field(3, 3, dtype=ti.f32, shape=n_particles)
         self.particle_C = ti.Matrix.field(3, 3, dtype=ti.f32, shape=n_particles)        # Affine momentum
         
+        self.particle_pressure = ti.field(dtype=ti.f32, shape=n_particles)
+
         self.particle_init_cov = ti.field(dtype=ti.f32, shape=n_particles * 6)          # Sec 3.4. A_p
         self.particle_cov = ti.field(dtype=ti.f32, shape=n_particles * 6)               # Sec 3.4. a_p(t)
 
+        self.particle_R = ti.Matrix.field(3, 3, dtype=ti.f32, shape=n_particles)        # Rotation of spherical harmonic basis (Sec 3.5)
+        
         self.particle_F_trial = ti.Matrix.field(3, 3, dtype=ti.f32, shape=n_particles)  # Used for plasticity models
         
         # Particle state initializations
@@ -195,3 +212,4 @@ class MPM_state_opt:
             self.particle_F[0, p] = self.particle_F[30, p]
             self.particle_stress[0, p] = self.particle_stress[30, p]
             self.particle_C[0, p] = self.particle_C[30, p]
+

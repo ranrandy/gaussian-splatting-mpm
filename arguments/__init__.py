@@ -50,9 +50,13 @@ class MPMParams(ParamGroup):
             [-1.0, -1.0, -1.0],
             [ 1.0,  1.0,  1.0]
         ]
+        self.mask = []
         
-        self.E = 1e5
-        self.nu = 0.1
+        # self.E = 1e5
+        # self.nu = 0.1
+        self.E = 2e6
+        self.nu = 0.4
+        self.viscosity = 0.05
         self.material = "jelly"
 
         self.gravity = [0.0, -9.81, 0.0]
@@ -83,7 +87,7 @@ class RenderParams(ParamGroup):
         self.output_path = ""
         self.white_background = False
 
-        self.view_cam_idx = 0
+        self.view_cam_idx = 10
         
         self.num_frames = 60
 

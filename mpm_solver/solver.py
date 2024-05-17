@@ -18,8 +18,11 @@ class MPM_Simulator:
 
         self.time = 0.0
 
+        self.collider_params = []
+
         self.particle_preprocess = []
         self.grid_postprocess = []
+        self.init_particles = []
 
     def p2g2p(self, dt: ti.f32):
         self.mpm_state.reset_grid_state()
@@ -36,7 +39,10 @@ class MPM_Simulator:
         # Grid operations
         grid_normalization_and_gravity(self.mpm_state, self.mpm_model, dt)
         for gp in self.grid_postprocess:
-            if gp.isActive(self.time):
+            if gp.isCollide:
+                gp.collide(self.time, dt, self.mpm_state, self.mpm_model)
+
+            elif gp.isActive(self.time):
                 gp.apply(self.mpm_state, self.mpm_model.dx)
         
         # Grid to Particle
@@ -111,6 +117,15 @@ class MPM_Simulator:
             
             if bc.type in postprocess_bc:
                 self.grid_postprocess.append(bc)
+            
+            if bc.type in init_bc:
+                self.init_particles.append(bc)
+
+        for pp in self.init_particles:
+            pp.apply(self.mpm_state, self.mpm_model)
+            if pp.isMaterial == False:
+                compute_mu_lam_from_E_nu(self.n_particles, self.mpm_model.E, self.mpm_model.nu, self.mpm_model.mu, self.mpm_model.lam)
+                pp.applymu(self.mpm_state, self.mpm_model)
 
     def set_bc_ground_only(self):
         bc = boundaryConditionTypeCallBacks["sticky_ground"]()
@@ -118,6 +133,37 @@ class MPM_Simulator:
 
     def postprocess(self):
         compute_cov_from_F(self.mpm_state, self.mpm_model)
+        compute_R_from_F(self.mpm_state, self.mpm_model)
+
+    # a surface specified by a point and the normal vector
+    def add_surface_collider(
+        self,
+        point,
+        normal,
+        surface="sticky", # For now, not used
+        friction=0.0,
+        start_time=0.0, # For now, not used
+        end_time=999.0, # For now, not used
+    ):
+        point = list(point)
+        # Normalize normal
+        normal_scale = 1.0 / tm.sqrt(float(sum(x**2 for x in normal)))
+        normal = list(normal_scale * x for x in normal)
+
+        collider_param = MPM_Collider(tm.vec3(point[0], point[1], point[2]), tm.vec3(normal[0], normal[1], normal[2]), friction)
+
+        # collider_param.point = tm.vec3(point[0], point[1], point[2])
+        # collider_param.normal = tm.vec3(normal[0], normal[1], normal[2])
+        # collider_param.friction = friction
+
+        self.collider_params.append(collider_param)
+
+        collide_type = "ground"
+
+        cl = collideTypeCallBacks[collide_type](collider_param.point, collider_param.normal, collider_param.friction)
+
+        self.grid_postprocess.append(cl)
+        # self.modify_bc.append(None)
 
     def postprocess_forward(self):
         compute_cov_from_F_opt(self.mpm_state, self.mpm_model)
