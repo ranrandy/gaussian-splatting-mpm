@@ -51,20 +51,22 @@ class MPMParams(ParamGroup):
             [ 1.0,  1.0,  1.0]
         ]
         
-        self.E = 2e6
-        self.nu = 0.4
+        self.E = 1e5
+        self.nu = 0.1
         self.material = "jelly"
 
-        self.gravity = [0.0, 0.0, -9.81]
-        self.density = 200.0
+        self.gravity = [0.0, -9.81, 0.0]
+        self.density = 1000.0
 
-        self.n_grid = 100
+        self.n_grid = 50
         self.grid_extent = 2.0
 
-        self.substep_dt = 1e-4
-        self.frame_dt = 4e-2
+        self.substep_dt = 0.0006
+        self.frame_dt = 0.03
 
         self.boundary_conditions = []
+
+        self.fitting = False
 
         super().__init__(parser, "MPM Parameters", json_params)
     

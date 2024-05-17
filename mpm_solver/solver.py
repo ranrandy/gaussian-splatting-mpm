@@ -8,14 +8,15 @@ from mpm_solver.boundary_conditions import *
 
 @ti.data_oriented
 class MPM_Simulator:
-    def __init__(self, xyzs, covs, volumes, args):
+    def __init__(self, xyzs, covs, volumes, args, init_v=None):
         self.n_particles = xyzs.shape[0]
         self.mpm_model = MPM_model(self.n_particles, args)
-        self.mpm_state = MPM_state(self.n_particles, xyzs, covs, volumes, args)
+        if args.fitting:
+            self.mpm_state = MPM_state_opt(self.n_particles, xyzs, covs, volumes, args, init_v)
+        else:
+            self.mpm_state = MPM_state(self.n_particles, xyzs, covs, volumes, args)
 
         self.time = 0.0
-
-        self.collider_params = {}
 
         self.particle_preprocess = []
         self.grid_postprocess = []
@@ -43,6 +44,62 @@ class MPM_Simulator:
         
         self.time += dt
 
+    def p2g2p_forward(self, dt: ti.f32, s):
+        self.mpm_state.reset_grid_state()
+
+        compute_stress_from_F_opt(self.mpm_state, self.mpm_model, dt, s)
+        
+        # Particle to Grid
+        p2g_opt(self.mpm_state, self.mpm_model, dt, s)
+        
+        # Grid operations
+        grid_normalization_and_gravity(self.mpm_state, self.mpm_model, dt)
+        self.grid_postprocess[0].apply(self.mpm_state, self.mpm_model.dx)
+        
+        # Grid to Particle
+        g2p_opt(self.mpm_state, self.mpm_model, dt, s)
+        
+        self.time += dt
+
+    def p2g2p_backward(self, dt: ti.f32, s):
+        self.mpm_state.reset_grid_state()
+
+        # Since we do not store the grid history (to save space), we redo p2g and grid op
+        p2g_opt(self.mpm_state, self.mpm_model, dt, s)
+
+        grid_normalization_and_gravity(self.mpm_state, self.mpm_model, dt)
+        self.grid_postprocess[0].apply(self.mpm_state, self.mpm_model.dx)
+        
+        # Backward
+        g2p_opt.grad(self.mpm_state, self.mpm_model, dt, s)
+
+        grid_normalization_and_gravity.grad(self.mpm_state, self.mpm_model, dt)
+        self.grid_postprocess[0].apply.grad(self.mpm_state, self.mpm_model.dx)
+        
+        p2g_opt.grad(self.mpm_state, self.mpm_model, dt, s)
+
+        compute_stress_from_F_opt.grad(self.mpm_state, self.mpm_model, dt, s)
+
+        compute_mu_lam_from_E_nu.grad(self.n_particles, self.mpm_model.logE, self.mpm_model.y, self.mpm_model.mu, self.mpm_model.lam)
+
+    @ti.kernel
+    def learn(self):
+        for p in range(self.n_particles):
+            # Clipping gradient for logE
+            clipped_grad_logE = self.mpm_model.logE.grad[p]
+            if ti.abs(self.mpm_model.logE.grad[p]) > 1.0:
+                grad_sign = tm.sign(self.mpm_model.logE.grad[p])
+                clipped_grad_logE = grad_sign * 1.0
+            
+            # Clipping gradient for y
+            clipped_grad_y = self.mpm_model.y.grad[p]
+            if ti.abs(self.mpm_model.y.grad[p]) > 1.0:
+                grad_sign = tm.sign(self.mpm_model.y.grad[p])
+                clipped_grad_y = grad_sign * 1.0
+            
+            self.mpm_model.logE[p] -= 0.8 * clipped_grad_logE
+            self.mpm_model.y[p] -= 1.6 * clipped_grad_y
+
     def set_boundary_conditions(self, bc_args_arr, sim_args : MPMParams):
         for bc_args in bc_args_arr:
             bc_type = bc_args["type"]
@@ -55,68 +112,19 @@ class MPM_Simulator:
             if bc.type in postprocess_bc:
                 self.grid_postprocess.append(bc)
 
+    def set_bc_ground_only(self):
+        bc = boundaryConditionTypeCallBacks["sticky_ground"]()
+        self.grid_postprocess.append(bc)
+
     def postprocess(self):
         compute_cov_from_F(self.mpm_state, self.mpm_model)
 
-    # a surface specified by a point and the normal vector
-    def add_surface_collider(
-        self,
-        point,
-        normal,
-        surface="sticky", # For now, not used
-        friction=0.0,
-        start_time=0.0, # For now, not used
-        end_time=999.0, # For now, not used
-    ):
-        point = list(point)
-        # Normalize normal
-        normal_scale = 1.0 / tm.sqrt(float(sum(x**2 for x in normal)))
-        normal = list(normal_scale * x for x in normal)
+    def postprocess_forward(self):
+        compute_cov_from_F_opt(self.mpm_state, self.mpm_model)
 
-        collider_param = MPM_Collider()
+    def postprocess_backward(self):
+        compute_cov_from_F_opt.grad(self.mpm_state, self.mpm_model)
 
-        collider_param.point = tm.vec3(point[0], point[1], point[2])
-        collider_param.normal = tm.vec3(normal[0], normal[1], normal[2])
-        collider_param.friction = friction
-
-        self.collider_params.append(collider_param)
-
-        @ti.kernel
-        def collide(
-            time: float,
-            dt: float,
-            state: ti.template(),
-            model: ti.template(),
-            param: ti.template()
-        ):
-            # print("TEST")
-            for grid_x, grid_y, grid_z in state.grid_m:
-                offset = tm.vec3(
-                    float(grid_x) * model.dx - param.point[0],
-                    float(grid_y) * model.dx - param.point[1],
-                    float(grid_z) * model.dx - param.point[2],
-                )
-                n = tm.vec3(param.normal[0], param.normal[1], param.normal[2])
-                dotproduct = tm.dot(offset, n)
-
-                if dotproduct < 0.0:
-                    v = state.grid_v_out[grid_x, grid_y, grid_z]
-                    normal_component = tm.dot(v, n)
-                    v = (
-                        v - ti.min(normal_component, 0.0) * n
-                    )  # Project out only inward normal component
-                    if normal_component < 0.0 and tm.length(v) > 1e-20:
-                        v = ti.max(
-                            0.0, tm.length(v) + normal_component * param.friction
-                        ) * tm.normalize(
-                            v
-                        )  # apply friction here
-                    state.grid_v_out[grid_x, grid_y, grid_z] = tm.vec3(
-                        0.0, 0.0, 0.0
-                    ) # This line was in the Warp implementation but seems like a mistake. This might make the surface act sticky?
-
-        self.grid_postprocess.append(collide)
-        self.modify_bc.append(None)
-
-
-
+    def clear_grads(self):
+        self.mpm_model.clear_grad()
+        self.mpm_state.clear_grad()

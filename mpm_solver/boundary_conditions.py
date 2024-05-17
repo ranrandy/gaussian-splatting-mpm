@@ -43,15 +43,27 @@ class ImpulseBC(BasicBC):
                 state.particle_vel[p] = state.particle_vel[p] + self.force / state.particle_mass[p] * self.substep_dt
 
 
+@ti.data_oriented
+class StickyGroundBC(BasicBC):
+    def __init__(self):
+        self.center = [1.0, 0.6, 1.0]
+        self.size = [1.0, 0.1, 1.0]
+
+    def isActive(self, time):
+        return True
+
+
 preprocess_bc = (
     "impulse"
 )
 
 postprocess_bc = (
-    "fixed_cube"
+    "fixed_cube",
+    "sticky_ground"
 )
 
 boundaryConditionTypeCallBacks = {
     "fixed_cube": BasicBC,
-    "impulse" : ImpulseBC
+    "impulse" : ImpulseBC,
+    "sticky_ground" : StickyGroundBC
 }
