@@ -1,10 +1,20 @@
-# 3D Gaussian Splatting + Material Point Method (MPM)
-Reimplementation of the [PhysGaussian](https://xpandora.github.io/PhysGaussian/) paper. Final project of the advanced computer graphics course at Brown. 
+# Physics-based 3D Gaussian Simulation
+***3D Gaussian Splatting + Material Point Method (MPM)***
 
-<!-- *Notes*:  -->
-Our implementation is built upon [1].
+![Pre Marketing Cover](RizzGaussians_elastic_lego.png)
 
-We might clean the code a bit more and add more details for setup, usage, etc. in the future. 
+Final project for [CSCI 2240 Advanced Computer Graphics](https://cs2240.graphics/) at Brown. 
+
+<!-- *Contributions*:  -->
+- We reimplemented [PhysGaussian](https://xpandora.github.io/PhysGaussian/) using [Taichi](https://www.taichi-lang.org/). 
+
+- We also explored a simple extension combining PhysGaussian and System Idenfication. 
+
+*Notes*: 
+- *Our implementation is built upon [1].*
+
+- *We might clean the code a bit more and add more details for setup, usage, etc. in the future.* 
+
 <!-- 
 ## Setup
 Please refer to the [PhysGaussian's repo](https://xpandora.github.io/PhysGaussian/) for environment setup instructions.
