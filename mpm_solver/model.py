@@ -26,6 +26,7 @@ class MPM_model:
 
         args_material = material_types.get(self.args.material, -1)
         if args_material != 0 and args_material != 1 and args_material != 2 and args_material != 3:
+        # if self.material == 4:
             raise TypeError("Material not supported yet")
 
         self.gravity = ti.Vector(self.args.gravity)
@@ -56,6 +57,14 @@ class MPM_model:
         self.xi = 1 # Field for metal # adjust
         self.plastic_viscosity = 0.008 # Field for foam # adjust
         self.softening = 1.0 # Field for plasticine
+
+    # def init_other_params(self):
+    #     self.yield_stress = ti.field(dtype=ti.f32, shape=self.n_particles) # Field for metal
+    #     self.yield_stress.fill(10000.0)  # adjust (was 100)
+    #     self.hardening = 1 # Field for metal
+    #     self.xi = 1 # Field for metal # adjust
+    #     self.plastic_viscosity = 10 # Field for foam # adjust
+    #     self.softening = 1.0 # Field for plasticine
 
     def clear_grad(self):
         self.logE.grad.fill(0.0)

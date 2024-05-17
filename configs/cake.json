@@ -1,0 +1,33 @@
+{
+    "model": 
+    {
+        "model_path": "models/cake",
+        "white_background": true,
+        "loaded_iter": 7000
+    },
+    "mpm": 
+    {
+        "sim_area": [
+            [-0.1, -0.2, 0.05],
+            [2.3, 2.0, 2.3]
+        ],
+        "E": 2e5,
+        "nu": 0.4,
+        "material": "jelly",
+        "density": 100.0,
+        "n_grid": 50,
+        "grid_extent": 2.0,
+        "substep_dt": 1e-4,
+        "frame_dt": 1e-2,
+        "gravity": [2.0, 0.0, 0.0],
+        "rotation_degree": [0.0],
+        "rotation_axis": [0],
+        "boundary_conditions": []
+    },
+    "render": 
+    {
+        "output_path": "outputs/cake_fracture",
+        "view_cam_idx": 28,
+        "num_frames": 245
+    }
+}

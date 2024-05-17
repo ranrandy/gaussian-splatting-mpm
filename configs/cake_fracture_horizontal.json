@@ -1,0 +1,53 @@
+{
+    "model": 
+    {
+        "model_path": "models/cake2",
+        "white_background": true,
+        "loaded_iter": 7000
+    },
+    "mpm": 
+    {
+        "view_area": [
+            [0.0, -1.7, -0.5],
+            [1.2, -0.3, 1.7]
+        ],
+        "sim_area": [
+            [0.0, -1.7, -0.5],
+            [1.2, 0.0, 1.7]
+        ],
+        "E": 8e3,
+        "nu": 0.01,
+        "material": "plasticine",
+        "density": 100.0,
+        "n_grid": 50,
+        "grid_extent": 2.0,
+        "substep_dt": 1e-4,
+        "frame_dt": 1e-3,
+        "gravity": [0.0, 300.0, -960.0],
+        "rotation_degree": [167.594, -52.0748, -2.34919],
+        "boundary_conditions": [
+            {
+                "id": 0,
+                "type": "fixed_cube",
+                "center": [1.0, 1.0, 1.2],
+                "size": [1.0, 1.0, 0.12],
+                "start_time": 0,
+                "num_dt": 10000000000000
+            },
+            {
+                "id": 1,
+                "type": "fixed_cube",
+                "center": [1.0, 1.0, -0.1],
+                "size": [1.0, 1.0, 0.2],
+                "start_time": 0,
+                "num_dt": 10000000000000
+            }
+        ]
+    },
+    "render": 
+    {
+        "output_path": "outputs/cake_plasticine",
+        "view_cam_idx": 48,
+        "num_frames": 150
+    }
+}

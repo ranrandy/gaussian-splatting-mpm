@@ -48,6 +48,7 @@ class MPM_Simulator:
         # Grid to Particle
         g2p(self.mpm_state, self.mpm_model, dt)
         
+        # print(self.time)
         self.time += dt
 
     def p2g2p_forward(self, dt: ti.f32, s):

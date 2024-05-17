@@ -23,6 +23,7 @@ from gaussian_splatting.utils.graphics_utils import focal2fov, getProjectionMatr
 from utils.render_utils import TinyCam, to8b
 from utils.transform_utils import *
 import copy
+import matplotlib.pyplot as plt # For testing
 
 ti.init(arch=ti.cuda)
 
@@ -105,6 +106,7 @@ def modify_cam(viewpoint_camera : TinyCam, center_view_world_space, observant_co
     return viewpoint_camera
 
 def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, sim_means3D, sim_covs, bg_color, args, rotation_matrices, pos_center, scaling_modifier = 1.0):
+# def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, sim_means3D, sim_covs, bg_color, args, view_mask, scaling_modifier = 1.0):
     '''
         Rasterize the Gaussian cloud
     '''
@@ -129,11 +131,6 @@ def render_frame(viewpoint_camera : TinyCam, pc : GaussianModel, sim_gs_mask, si
     rasterizer = GaussianRasterizer(raster_settings=raster_settings)
 
     # Rasterize visible Gaussians to image, obtain their radii (on screen). 
-    # means3D = torch.cat([pc.get_xyz[~sim_gs_mask], sim_means3D], dim=0)
-    # opacities = torch.cat([pc.get_opacity[~sim_gs_mask], pc.get_opacity[sim_gs_mask]], dim=0)
-    # shs = torch.cat([pc.get_features[~sim_gs_mask], pc.get_features[sim_gs_mask]], dim=0)
-    # covs = torch.cat([pc.get_covariance()[~sim_gs_mask], sim_covs], dim=0)
-
     means3D = sim_means3D
     opacities = pc.get_opacity[sim_gs_mask]
     shs = pc.get_features[sim_gs_mask]
@@ -177,6 +174,16 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
 
     rotation_matrices = generate_rotation_matrices([torch.tensor(0.0)], [torch.tensor(0.0)])
     rotated_gaussians = apply_rotations(gaussians.get_xyz, rotation_matrices)
+    # # degrees = torch.tensor(sim_args.rotation_degree)
+    # # print("rotations: ", degrees)
+    # # mats = get_rotation_matrices(degrees)
+    # # rotated_gaussians = rotate(gaussians.get_xyz, mats)
+
+    # # Apply rotations for pre-processing
+    # degrees = torch.tensor(sim_args.rotation_degree)
+    # r_mats = get_rotation_matrices(degrees)
+    # rotated_xyz = rotate(gaussians.get_xyz, r_mats)
+    # rotated_covs = rotate_covs(gaussians.get_covariance(), r_mats)
 
     # Simulation settings
     influenced_region_bound = torch.tensor(np.array(sim_args.sim_area)).cuda()
@@ -186,7 +193,20 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     simulatable_gs_mask = torch.logical_and(max_bounded_gs_mask, min_bounded_gs_mask)
     num_sim_gs = torch.sum(simulatable_gs_mask)
 
-    # simulatable_gs_mask = torch.zeros(rotated_gaussians.shape[0], dtype=torch.bool).cuda()
+    # # simulatable_gs_mask = torch.zeros(rotated_gaussians.shape[0], dtype=torch.bool).cuda()
+    # # max_bounded_gs_mask = (gaussians.get_xyz <= influenced_region_bound[1]).all(dim=1)
+    # # min_bounded_gs_mask = (gaussians.get_xyz >= influenced_region_bound[0]).all(dim=1) 
+    # max_bounded_gs_mask = (rotated_xyz <= influenced_region_bound[1]).all(dim=1)
+    # min_bounded_gs_mask = (rotated_xyz >= influenced_region_bound[0]).all(dim=1)
+    # simulatable_gs_mask = torch.logical_and(max_bounded_gs_mask, min_bounded_gs_mask)
+    # num_sim_gs = torch.sum(simulatable_gs_mask)
+
+    # viewable_bound = torch.tensor(np.array(sim_args.view_area)).cuda()
+    # max_view = (rotated_xyz <= viewable_bound[1]).all(dim=1)
+    # min_view = (rotated_xyz >= viewable_bound[0]).all(dim=1)
+    # view_mask = torch.logical_and(max_view, min_view)
+
+    print(f"Number of simulatable Gaussians: {num_sim_gs}")
 
     # for bounds in sim_args.sim_area:
     #     bounds = torch.tensor(np.array(bounds)).cuda()
@@ -197,7 +217,7 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
 
     # num_sim_gs = torch.sum(simulatable_gs_mask)
 
-    print(f"Number of simulatable Gaussians: {num_sim_gs}")
+    # print(f"Number of simulatable Gaussians: {num_sim_gs}")
 
     bg_color = [1, 1, 1] if render_args.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
@@ -215,6 +235,8 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     sim_covs = gaussians.get_covariance()[simulatable_gs_mask].detach()
     
     sim_covs = apply_cov_rotations(sim_covs, rotation_matrices)
+    # sim_means3D = rotated_xyz[simulatable_gs_mask].detach()
+    # sim_covs = rotated_covs[simulatable_gs_mask].detach()
 
     transformed_sim_means3D, pos_center, scaling_modifier = world2grid(sim_means3D, sim_args)
     transformed_sim_covs = sim_covs * (scaling_modifier * scaling_modifier)
@@ -258,6 +280,12 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
     # mpm_solver.add_surface_collider((0.0, 1.7, 0.0), (0.0, -1.0, 0.0))
     # mpm_solver.add_surface_collider((0.0, 0.0, 1.7), (0.0, 0.0, -1.0))
 
+    # mpm_solver.add_surface_collider((0.0, 1.2, 0.0), (0.0, -1.0, 0.0))
+    # mpm_solver.add_surface_collider((0.0, -1.75, 0.0), (0.0, 1.0, 0.0))
+    # mpm_solver.add_surface_collider((-0.5, 0.0, 0.0), (1.0, 0.0, 0.0))
+    # mpm_solver.add_surface_collider((1.7, 0.0, 0.0), (-1.0, 0.0, 0.0))
+    # mpm_solver.add_surface_collider((0.0, 0.0, -1.0), (0.0, 0.0, 1.0))
+    # mpm_solver.add_surface_collider((0.0, 0.0, 2.2), (0.0, 0.0, -1.0))
 
     # # Test for adding a surface collider
     # point = [0.0, 0.0, -0.8]
@@ -268,6 +296,8 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
 
     # Render initial frame
     rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, sim_means3D, sim_covs, background, model_args, rotation_matrices, pos_center)
+    # rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, sim_means3D, sim_covs, background, model_args, view_mask)
+    # rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, rotated_xyz[~simulatable_gs_mask], sim_means3D, rotated_covs[~simulatable_gs_mask], sim_covs, background, model_args)
     save_frame(rendered_img, save_images_folder, 0, rendered_img_seq)
 
     for fid in tqdm(range(1, render_args.num_frames + 1)):
@@ -291,6 +321,8 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
         
         # Render current frame
         rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, sim_means3D, sim_covs, background, model_args, rotation_matrices, pos_center)
+        # rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, sim_means3D, sim_covs, background, model_args, view_mask)
+        # rendered_img = render_frame(viewpoint_camera, gaussians, simulatable_gs_mask, rotated_xyz[~simulatable_gs_mask], sim_means3D, rotated_covs[~simulatable_gs_mask], sim_covs, background, model_args)
         save_frame(rendered_img, save_images_folder, fid, rendered_img_seq)
 
     if render_args.save_pcd:
@@ -298,7 +330,7 @@ def simulate(model_args : ModelParams, sim_args : MPMParams, render_args : Rende
         shutil.copy(os.path.join(model_args.model_path, "cfg_args"), os.path.join(render_args.output_path, "cfg_args"))
         shutil.copy(os.path.join(model_args.model_path, "input.ply"), os.path.join(render_args.output_path, "input.ply"))
     
-    os.system(f"ffmpeg -framerate 25 -i {save_images_folder}/%04d.png -c:v libx264 -s {viewpoint_camera.width}x{viewpoint_camera.height} -y -pix_fmt yuv420p {render_args.output_path}/simulated.mp4")
+    os.system(f"ffmpeg -framerate 25 -i {save_images_folder}/%04d.png -c:v libx264 -vf \"pad=ceil(iw/2)*2:ceil(ih/2)*2\" -y -pix_fmt yuv420p {render_args.output_path}/simulated.mp4")
 
     print("Done.")
 

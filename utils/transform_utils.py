@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import os
+import math
 from arguments import *
 
 
@@ -73,8 +74,7 @@ def get_mat_from_upper(upper_mat):
 
     return mat.view(-1, 3, 3)
 
-
-def get_uppder_from_mat(mat):
+def get_upper_from_mat(mat):
     mat = mat.view(-1, 9)
     upper_mat = torch.zeros((mat.shape[0], 6), device="cuda")
     upper_mat[:, :3] = mat[:, :3]
@@ -94,7 +94,7 @@ def apply_cov_rotations(upper_cov_tensor, rotation_matrices):
     cov_tensor = get_mat_from_upper(upper_cov_tensor)
     for i in range(len(rotation_matrices)):
         cov_tensor = apply_cov_rotation(cov_tensor, rotation_matrices[i])
-    return get_uppder_from_mat(cov_tensor)
+    return get_upper_from_mat(cov_tensor)
 
 def undoshift2center111(position_tensor):
     tensor111 = torch.tensor([1.0, 1.0, 1.0], device="cuda")
@@ -118,7 +118,7 @@ def apply_inverse_cov_rotations(upper_cov_tensor, rotation_matrices):
     for i in range(len(rotation_matrices)):
         R = rotation_matrices[len(rotation_matrices) - 1 - i]
         cov_tensor = apply_cov_rotation(cov_tensor, R.T)
-    return get_uppder_from_mat(cov_tensor)
+    return get_upper_from_mat(cov_tensor)
 
 def undotransform2origin(position_tensor, scale, original_mean_pos):
     return original_mean_pos + position_tensor / scale
@@ -236,7 +236,7 @@ def apply_inverse_cov_rotations(upper_cov_tensor, rotation_matrices):
     for i in range(len(rotation_matrices)):
         R = rotation_matrices[len(rotation_matrices) - 1 - i]
         cov_tensor = apply_cov_rotation(cov_tensor, R.T)
-    return get_uppder_from_mat(cov_tensor)
+    return get_upper_from_mat(cov_tensor)
 
 def particle_position_tensor_to_ply(position_tensor, filename):
     # position is (n,3)
@@ -257,3 +257,38 @@ end_header
         f.write(str.encode(header))
         f.write(position.tobytes())
         print("write", filename)
+def rotate_covs(upper_cov_tensor, mats):
+    cov_tensor = get_mat_from_upper(upper_cov_tensor)
+    for i in range(len(mats)):
+        cov_tensor = torch.matmul(mats[i], torch.matmul(cov_tensor, mats[i].T))
+    return get_upper_from_mat(cov_tensor)
+
+def rotate(points, mats):
+    for i in range(len(mats)):
+        points = torch.mm(points, mats[i].T)
+    return points
+
+# # Generate a rotation matrix for degree (specified in units of degrees) and an axis (0, 1, or 2)
+def get_rotation_matrix(degree, axis):
+    cos_theta = torch.cos(degree / 180.0 * torch.pi)
+    sin_theta = torch.sin(degree / 180.0 * torch.pi)
+    if axis == 0:
+        r = torch.tensor(
+            [[1, 0, 0], [0, cos_theta, -sin_theta], [0, sin_theta, cos_theta]]
+        )
+    elif axis == 1:
+        r = torch.tensor(
+            [[cos_theta, 0, sin_theta], [0, 1, 0], [-sin_theta, 0, cos_theta]]
+        )
+    else:
+        r = torch.tensor(
+            [[cos_theta, -sin_theta, 0], [sin_theta, cos_theta, 0], [0, 0, 1]]
+        )
+    return r.cuda()
+
+def get_rotation_matrices(degrees):
+    assert len(degrees) == 3
+    mats = []
+    for i in range(2):
+        mats.append(get_rotation_matrix(degrees[i], i))
+    return mats

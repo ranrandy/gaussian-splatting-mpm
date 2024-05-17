@@ -46,6 +46,7 @@ class ModelParams(ParamGroup):
 
 class MPMParams(ParamGroup):
     def __init__(self, parser, json_params=None):
+        self.view_area = []
         self.sim_area = [
             [-1.0, -1.0, -1.0],
             [ 1.0,  1.0,  1.0]
@@ -67,6 +68,8 @@ class MPMParams(ParamGroup):
 
         self.substep_dt = 0.0006
         self.frame_dt = 0.03
+
+        self.rotation_degree = [0.0, 0.0, 0.0]
 
         self.boundary_conditions = []
 

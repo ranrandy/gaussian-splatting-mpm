@@ -1,0 +1,37 @@
+{
+    "model": 
+    {
+        "model_path": "models/bicycle",
+        "white_background": true,
+        "loaded_iter": 7000
+    },
+    "mpm": 
+    {
+        "view_area": [
+            [0.0, -1.7, -0.5],
+            [1.2, -0.3, 1.7]
+        ],
+        "sim_area": [
+            [0.0, 0.0, 0.0],
+            [1.0, 1.0, 1.0]
+        ],
+        "E": 2e5,
+        "nu": 0.4,
+        "material": "jelly",
+        "density": 100.0,
+        "n_grid": 50,
+        "grid_extent": 2.0,
+        "substep_dt": 1e-4,
+        "frame_dt": 1e-2,
+        "gravity": [0.0, 0.0, -3.0],
+        "rotation_degree": [0.0, 0.0, 0.0],
+        "boundary_conditions": [
+        ]
+    },
+    "render": 
+    {
+        "output_path": "outputs/cake_fracture",
+        "view_cam_idx": 36,
+        "num_frames": 50
+    }
+}
