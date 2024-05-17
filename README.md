@@ -8,7 +8,7 @@ Final project for [CSCI 2240 Advanced Computer Graphics](https://cs2240.graphics
 <!-- *Contributions*:  -->
 - We reimplemented [PhysGaussian](https://xpandora.github.io/PhysGaussian/) using [Taichi](https://www.taichi-lang.org/). 
 
-- We also explored a simple extension combining PhysGaussian and System Idenfication. 
+- We also explored a simple extension combining PhysGaussian and System Idenfication, estimating the physical (mechanical) parameters (Young's Modulus) for 3D Gaussians. 
 
 *Notes*: 
 - *Our implementation is built upon [1].*
