@@ -43,7 +43,7 @@ python main.py --config_path configs/lego.json --output_path outputs/lego_debug 
 
 <!-- ### Elastic Lego -->
 <!-- ![elastic-lego](outputs/lego_elastic/simulated.gif) -->
-
+https://docs.google.com/presentation/d/1Q6cslEOO2gODz8dcMjzbe5Li7vIFzYUTRP-gWgDarpc/edit?usp=sharing
 
 
 <!-- ## Extra Features -->
