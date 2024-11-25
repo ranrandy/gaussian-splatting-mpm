@@ -41,8 +41,10 @@ python main.py --config_path configs/lego.json --output_path outputs/lego_debug 
 
 ## Results
 
-<!-- ### Elastic Lego -->
-<!-- ![elastic-lego](outputs/lego_elastic/simulated.gif) -->
+### Elastic Lego
+![elastic-lego](outputs/lego_elastic/simulated.gif)
+
+### More
 https://docs.google.com/presentation/d/1Q6cslEOO2gODz8dcMjzbe5Li7vIFzYUTRP-gWgDarpc/edit?usp=sharing
 
 
